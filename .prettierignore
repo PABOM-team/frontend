@@ -1,0 +1,5 @@
+pnpm-lock.yaml
+public/mockServiceWorker.js
+public/sw*
+src/shared/api/generated
+.next
