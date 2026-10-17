@@ -121,9 +121,8 @@ export function LoginButtons({
         onConfirm={async () => {
           setInAppOpen(false);
           if (openInExternalBrowser()) return;
-          // iOS 앱 안 브라우저는 주소를 복사해 Safari에 붙여 넣게 한다
+          // iOS 앱 안 브라우저는 열 방법이 없어 주소만 복사해 둔다 (Figma에 따로 안내 화면은 없다)
           await navigator.clipboard?.writeText(window.location.href).catch(() => undefined);
-          toast("주소를 복사했어요. Safari에 붙여 넣어 열어 주세요.");
         }}
       />
     </div>

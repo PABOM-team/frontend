@@ -5,7 +5,7 @@ import { ChevronRight, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { safeNext, useLogout } from "@/features/auth";
+import { safeNext } from "@/features/auth";
 import { meApi } from "@/shared/api/endpoints";
 import { getApiError, getErrorMessage } from "@/shared/api/errors";
 import { queryKeys } from "@/shared/api/query-keys";
@@ -14,13 +14,14 @@ import { AGREEMENTS, type AgreementType } from "@/shared/domain/user";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/form";
 import { Screen, ScreenBody, ScreenFooter } from "@/shared/ui/screen";
+import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/ui/toast";
 
 /** 가입 토큰이 없거나 10분이 지나 처음부터 다시 로그인해야 할 때 */
 class SignupExpired extends Error {}
 
 /**
- * SCR-A03 첫 로그인 약관 동의. 뒤로 없음, 나가기는 로그아웃.
+ * SCR-A03 첫 로그인 약관 동의. Figma 그대로 머리줄 없이 제목·동의 목록·시작하기만.
  * 로그인 결과로 받은 가입 토큰으로 동의를 보내고, 가입이 끝나면 access 토큰을 받는다
  */
 export function AgreementsScreen() {
@@ -29,7 +30,6 @@ export function AgreementsScreen() {
   // 인계 카드 링크로 들어온 사람만 그 카드로 돌려보내고, 나머지는 가입 직후 개체 등록(A04 A안)으로
   const requested = safeNext(useSearchParams().get("next"));
   const next = requested?.startsWith("/share/") ? requested : null;
-  const logout = useLogout();
   const [checked, setChecked] = useState<Set<AgreementType>>(new Set());
 
   // 로그인을 거치지 않고 들어왔으면 첫 화면으로
@@ -74,18 +74,8 @@ export function AgreementsScreen() {
 
   return (
     <Screen>
-      <div className="flex h-[52px] shrink-0 items-center justify-end px-4">
-        <button
-          type="button"
-          className="text-[13px] text-[#888]"
-          onClick={() => logout.mutate()}
-          disabled={logout.isPending}
-        >
-          나가기
-        </button>
-      </div>
       {/* 저장 중에는 입력을 흐리게 잠근다 (C2-2) */}
-      <ScreenBody className={agree.isPending ? "pointer-events-none opacity-50" : undefined}>
+      <ScreenBody className={cn("pt-6", agree.isPending && "pointer-events-none opacity-50")}>
         <h1 className="text-[22px] leading-snug font-bold">
           파봄을 쓰려면
           <br />
@@ -128,9 +118,6 @@ export function AgreementsScreen() {
             </li>
           ))}
         </ul>
-        <div className="mt-5 rounded-[10px] bg-[#f5f5f5] p-3 text-[12px] leading-relaxed text-[#666]">
-          받는 정보: 로그인 서비스의 고유 식별값, 닉네임(구글은 이름). 이메일·연락처는 받지 않아요.
-        </div>
       </ScreenBody>
       <ScreenFooter>
         <Button
@@ -144,11 +131,6 @@ export function AgreementsScreen() {
             "시작하기"
           )}
         </Button>
-        {!requiredDone ? (
-          <p className="text-center text-[11.5px] text-[#888]">
-            필수 항목에 모두 동의하면 시작할 수 있어요
-          </p>
-        ) : null}
       </ScreenFooter>
     </Screen>
   );

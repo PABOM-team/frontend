@@ -9,8 +9,7 @@ import { authApi } from "@/shared/api/endpoints";
 import { getErrorMessage } from "@/shared/api/errors";
 import { setAccessToken, setSignupSession, setStoredAccount } from "@/shared/api/session";
 import { authProviderSchema, type AuthProvider } from "@/shared/domain/user";
-import { StateMessage } from "@/shared/ui/display";
-import { Screen } from "@/shared/ui/screen";
+import { toast } from "@/shared/ui/toast";
 
 type LoginOutcome =
   | { kind: "signup"; token: string; expiresIn: number; id: number; nickname?: string }
@@ -56,7 +55,11 @@ async function resolveLogin(
     : { kind: "access", token: login.accessToken, ...user };
 }
 
-/** SCR-A02 로그인 처리 중. 처리 뒤 뒤로 가기로 이 화면에 다시 오지 않게 replace로 이동 */
+/**
+ * SCR-A02 로그인 처리 중. Figma에는 이 화면의 실패 화면이 없어서
+ * 취소하면 첫 화면으로 그냥 돌아가고, 실패하면 오류 토스트(C3-4)와 함께 첫 화면으로 간다.
+ * 처리 뒤 뒤로 가기로 이 화면에 다시 오지 않게 replace로 이동
+ */
 export function LoginCallback() {
   const router = useRouter();
   const params = useParams<{ provider: string }>();
@@ -65,6 +68,7 @@ export function LoginCallback() {
   const code = search.get("code");
   const state = search.get("state");
   const errorCode = search.get("error");
+  const errorMessage = search.get("message");
   const started = useRef(false);
 
   const login = useMutation({
@@ -80,41 +84,27 @@ export function LoginCallback() {
         router.replace(next ?? "/home");
       }
     },
+    onError: (error) => {
+      if (!(error instanceof LoginCanceled)) {
+        toast(error instanceof LoginFailure ? error.message : getErrorMessage(error, FAILED));
+      }
+      router.replace("/welcome");
+    },
   });
 
   useEffect(() => {
-    if (!provider.success || errorCode || started.current) return;
+    if (started.current) return;
     started.current = true;
+    if (!provider.success || errorCode) {
+      // 동의 화면에서 취소(access_denied)는 조용히, 백엔드 오류는 문구를 보여 주고 첫 화면으로
+      if (provider.success && errorCode !== "access_denied") toast(errorMessage ?? FAILED);
+      router.replace("/welcome");
+      return;
+    }
     login.mutate();
-  }, [provider.success, errorCode, login]);
-
-  if (!provider.success || errorCode === "access_denied" || login.error instanceof LoginCanceled) {
-    return (
-      <Screen className="justify-center">
-        <StateMessage
-          title="로그인을 취소했어요"
-          description="다시 시작하려면 처음 화면에서 로그인해 주세요."
-          action={{ label: "처음으로", onClick: () => router.replace("/welcome") }}
-        />
-      </Screen>
-    );
-  }
-
-  // 인가 코드는 한 번만 쓸 수 있어서 '다시 시도' 대신 처음부터 다시 로그인하게 한다
-  if (errorCode || login.isError) {
-    const message =
-      search.get("message") ??
-      (login.error instanceof LoginFailure ? login.error.message : getErrorMessage(login.error));
-    return (
-      <Screen className="justify-center">
-        <StateMessage
-          title="로그인하지 못했어요"
-          description={message}
-          action={{ label: "다시 로그인", onClick: () => router.replace("/welcome") }}
-        />
-      </Screen>
-    );
-  }
+  }, [provider.success, errorCode, errorMessage, login, router]);
 
   return <FullScreenLoading />;
 }
+
+const FAILED = "로그인하지 못했어요. 다시 시도해 주세요.";
