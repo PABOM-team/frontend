@@ -1,6 +1,9 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { ImageResponse } from "next/og";
 
-// 임시 앱 아이콘. 디자인 에셋이 나오면 public/icons/*.png로 바꾸고 이 라우트는 지운다.
+// 앱 아이콘: Figma 'Design | 브랜딩' Logo.03 (파란 그라데이션 + 게코 발자국 P).
+// PNG 에셋이 나오면 public/icons/*.png로 바꾸고 이 라우트는 지운다.
 const SIZES = ["192", "512"];
 
 export function generateStaticParams() {
@@ -11,6 +14,8 @@ export async function GET(_req: Request, { params }: RouteContext<"/icons/[size]
   const { size } = await params;
   if (!SIZES.includes(size)) return new Response("Not found", { status: 404 });
   const px = Number(size);
+  const symbol = await readFile(join(process.cwd(), "public/brand/pabom-symbol.svg"));
+  const src = `data:image/svg+xml;base64,${symbol.toString("base64")}`;
 
   return new ImageResponse(
     <div
@@ -20,13 +25,11 @@ export async function GET(_req: Request, { params }: RouteContext<"/icons/[size]
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#3f7d4e",
-        color: "white",
-        fontSize: px * 0.5,
-        fontWeight: 700,
+        background: "linear-gradient(180deg, #669eff 0%, #2999ff 100%)",
       }}
     >
-      P
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" width={px * 0.5} height={px * 0.636} />
     </div>,
     { width: px, height: px },
   );
