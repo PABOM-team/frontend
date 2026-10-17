@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { speciesQueries } from "@/entities/species";
 import { SPECIES_GROUP_LABEL, SPECIES_GROUPS, type SpeciesGroup } from "@/shared/domain/species";
-import { cn } from "@/shared/lib/utils";
 import { PhotoBox, Skeleton } from "@/shared/ui/display";
 import { Screen, ScreenBody } from "@/shared/ui/screen";
 import { TopBar } from "@/shared/ui/top-bar";
@@ -45,12 +44,13 @@ export function GuidelinesScreen() {
         <ul>
           {SPECIES_GROUPS.map((g) => {
             const count = (data ?? []).filter((s) => s.group === g).length;
+            // 뱀(볼파이톤)은 MVP 범위 밖이라 가이드라인이 없다. 줄은 Figma 그대로 두고 누를 곳만 없다
             return (
               <li key={g}>
                 <Row
-                  href={count ? `/settings/guidelines?group=${g}` : undefined}
+                  href={g === "snake" ? undefined : `/settings/guidelines?group=${g}`}
                   title={SPECIES_GROUP_LABEL[g]}
-                  description={count ? `종 ${count}개` : "볼파이톤 · 준비 중이에요"}
+                  description={g === "snake" ? "볼파이톤" : data ? `종 ${count}개` : undefined}
                 />
               </li>
             );
@@ -69,13 +69,10 @@ function Row({ href, title, description }: { href?: string; title: string; descr
         <span className="block text-[15px] font-bold">{title}</span>
         {description ? <span className="block text-[12px] text-[#888]">{description}</span> : null}
       </span>
-      {href ? <ChevronRight className="size-4 text-[#aaa]" /> : null}
+      <ChevronRight className="size-4 text-[#aaa]" />
     </>
   );
-  const className = cn(
-    "flex items-center gap-3 border-b border-border py-3",
-    !href && "opacity-50",
-  );
+  const className = "flex items-center gap-3 border-b border-border py-3";
   return href ? (
     <Link href={href} className={className}>
       {body}

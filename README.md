@@ -22,7 +22,7 @@ pnpm dev
 | `NEXT_PUBLIC_API_LIVE`     | 목업 모드에서도 진짜로 보낼 API 묶음. `auth` = 로그인·약관 동의. 비우면 로그인도 목업   |
 
 - 목업 로그인(`NEXT_PUBLIC_API_LIVE` 비움): **카카오 = 기록이 쌓인 기존 회원(유나)**, **구글 = 처음 가입하는 회원**(약관 → 개체 등록 흐름)
-- 목업 데이터는 브라우저 localStorage(`pabom-mock-db`)에 저장된다. 설정 화면 맨 아래 '목업 데이터 처음으로 되돌리기'로 초기화
+- 목업 데이터는 브라우저 localStorage(`pabom-mock-db`)에 저장된다. 브라우저 콘솔에서 `pabomMock.reset()`으로 초기화 (화면은 Figma 그대로 두려고 버튼을 두지 않는다)
 - 진짜로 로그인한 회원은 목업에서 빈 계정으로 시작한다 (access 토큰의 회원 번호로 목업 계정을 만든다)
 - 인계 카드 예시: `/share/DEMO2026`
 - 화면 흐름과 API 연결표: [docs/screen-flow.md](docs/screen-flow.md)

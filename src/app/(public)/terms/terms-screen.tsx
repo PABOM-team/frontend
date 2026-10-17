@@ -48,7 +48,8 @@ export function TermsScreen() {
             </a>
           ))}
         </nav>
-        {doc.sections.map((s, i) => (
+        {/* 원문 확정 전이라 Figma처럼 앞 두 조만 막대로 보여 준다 */}
+        {doc.sections.slice(0, 2).map((s, i) => (
           <section key={s} id={`sec-${i}`} className="mt-5">
             <h2 className="mb-2.5 text-[14px] font-bold">{s}</h2>
             <div className="space-y-2" aria-label="원문 준비 중">

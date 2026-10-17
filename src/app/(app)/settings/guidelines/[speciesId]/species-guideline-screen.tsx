@@ -57,9 +57,6 @@ export function SpeciesGuidelineScreen() {
               {table.data.version} · {table.data.effectiveFrom} 적용
               {table.data.isDraft ? " (예시)" : ""}
             </p>
-            <p className="mt-0.5 text-[12px] text-[#aaa]">
-              {species.officialName} · <i>{species.scientificName}</i>
-            </p>
             <table className="mt-3 w-full text-left text-[13px]">
               <thead>
                 <tr className="bg-[#f3f3f3] text-[12px] text-[#555]">
