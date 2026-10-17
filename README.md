@@ -27,6 +27,19 @@ pnpm dev
 - 인계 카드 예시: `/share/DEMO2026`
 - 화면 흐름과 API 연결표: [docs/screen-flow.md](docs/screen-flow.md)
 
+## 배포 환경
+
+같은 코드를 환경 변수만 바꿔 세 곳에 배포한다. `NEXT_PUBLIC_` 값은 빌드할 때 들어가므로 바꾸면 다시 배포한다.
+
+| 환경               | 용도                               | `NEXT_PUBLIC_API_BASE_URL`  | `NEXT_PUBLIC_API_MOCKING` | `NEXT_PUBLIC_API_LIVE` |
+| ------------------ | ---------------------------------- | --------------------------- | ------------------------- | ---------------------- |
+| 데모 서버          | 화면 시연. 백엔드 없이 전부 목업   | (비움)                      | `enabled`                 | (비움)                 |
+| 개발 서버 (dev)    | 백엔드 연동. 없는 API만 목업       | `https://dev.api.pabom.app` | `enabled`                 | `auth`                 |
+| 운영 서버          | 실서비스                           | `https://api.pabom.app`     | `disabled`                | (비움)                 |
+
+- 데모 서버는 로그인도 목업이라 카카오·구글 콘솔이나 백엔드 설정이 필요 없다. 데이터는 보는 사람 브라우저에만 저장된다
+- 개발 서버는 백엔드 API가 생기는 대로 `NEXT_PUBLIC_API_LIVE`에 묶음을 늘리고, 다 생기면 목업을 끈다
+
 ## 로그인 (백엔드 연동)
 
 1. 버튼을 누르면 `GET /auth/{provider}/login-url`로 카카오·구글 주소를 받는다. 이때 state 쿠키가 같이 온다
