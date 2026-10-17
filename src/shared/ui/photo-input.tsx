@@ -1,20 +1,18 @@
 "use client";
 
-import { Plus, RotateCw } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { filesApi } from "@/shared/api/endpoints";
-import { getErrorMessage } from "@/shared/api/errors";
 import type { Photo } from "@/shared/domain/record";
 import { resizeImage } from "@/shared/lib/image";
 import { cn } from "@/shared/lib/utils";
 import { Spinner } from "./display";
-import { toast } from "./toast";
 
 type Pending = { key: string; file: File; status: "uploading" | "failed" };
 
 /**
  * 사진 칸 (R03·R02). 고르면 바로 줄여서 올리고, 실패하면 그 칸에서 다시 시도한다 (C2-4).
- * 올린 사진을 누르면 크게 보기.
+ * 올린 사진을 누르면 크게 보기. 최대 장수를 넘게 고르면 넘친 사진은 올리지 않는다
  */
 export function PhotoInput({
   value,
@@ -51,8 +49,8 @@ export function PhotoInput({
       latest.current = [...latest.current, photo];
       onChange(latest.current);
       setPending((list) => list.filter((p) => p.key !== item.key));
-    } catch (error) {
-      toast(getErrorMessage(error, "사진을 올리지 못했어요."));
+    } catch {
+      // 실패는 그 칸에 '다시 시도'로 보여 준다 (C2-4)
       setPending((list) =>
         list.map((p) => (p.key === item.key ? { ...p, status: "failed" as const } : p)),
       );
@@ -63,7 +61,6 @@ export function PhotoInput({
     if (!files) return;
     const room = max - value.length - pending.length;
     const picked = Array.from(files).slice(0, Math.max(0, room));
-    if (files.length > room) toast(`사진은 ${max}장까지 올릴 수 있어요`);
     const items = picked.map((file) => ({
       key: `${file.name}-${file.lastModified}-${Math.random()}`,
       file,
@@ -80,25 +77,16 @@ export function PhotoInput({
   return (
     <div className="flex flex-wrap gap-2">
       {value.map((photo, index) => (
-        <div key={photo.id} className="relative">
-          <button
-            type="button"
-            onClick={() => onView?.(index)}
-            className={cn(box, "border border-[#ddd]")}
-            aria-label={`사진 ${index + 1} 크게 보기`}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photo.url} alt="" className="size-full object-cover" />
-          </button>
-          <button
-            type="button"
-            aria-label={`사진 ${index + 1} 빼기`}
-            onClick={() => onChange(value.filter((p) => p.id !== photo.id))}
-            className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-inverse text-[11px] text-white"
-          >
-            ×
-          </button>
-        </div>
+        <button
+          key={photo.id}
+          type="button"
+          onClick={() => onView?.(index)}
+          className={cn(box, "border border-[#ddd]")}
+          aria-label={`사진 ${index + 1} 크게 보기`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={photo.url} alt="" className="size-full object-cover" />
+        </button>
       ))}
       {pending.map((item) => (
         <button
@@ -116,10 +104,13 @@ export function PhotoInput({
           aria-label={item.status === "failed" ? "사진 다시 올리기" : "사진 올리는 중"}
         >
           {item.status === "uploading" ? (
-            <Spinner className="scale-75" />
+            <>
+              <Spinner className="scale-75" />
+              <span className="text-[#888]">올리는 중</span>
+            </>
           ) : (
             <>
-              <RotateCw className="size-4" />
+              <span className="text-[15px] leading-none font-bold">!</span>
               다시 시도
             </>
           )}

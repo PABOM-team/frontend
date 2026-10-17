@@ -71,9 +71,7 @@ export function DateTimeField({
               setOpen(false);
             }}
           >
-            {future
-              ? "지금보다 뒤 시각이에요"
-              : `${formatDateTime(draft)}${roParticle(draft)} 고르기`}
+            {`${formatDateTime(draft)}${roParticle(draft)} 고르기`}
           </Button>
         }
       >

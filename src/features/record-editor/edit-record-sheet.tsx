@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
+import { LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import { recordQueries } from "@/entities/record";
 import { recordsApi } from "@/shared/api/endpoints";
@@ -20,7 +21,7 @@ import { Button } from "@/shared/ui/button";
 import { ChipGroup } from "@/shared/ui/chip";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { DateTimeField } from "@/shared/ui/date-time-field";
-import { InfoBox, Spinner } from "@/shared/ui/display";
+import { InfoBox, LoadError, Spinner } from "@/shared/ui/display";
 import { Input, Textarea } from "@/shared/ui/form";
 import { PhotoInput } from "@/shared/ui/photo-input";
 import { PhotoViewer } from "@/shared/ui/photo-viewer";
@@ -59,6 +60,7 @@ export function EditRecordSheet({
     data: record,
     isPending,
     isError,
+    refetch,
   } = useQuery({
     ...recordQueries.detail(recordId ?? ""),
     enabled: Boolean(recordId),
@@ -91,10 +93,7 @@ export function EditRecordSheet({
         memo: draft!.memo.trim() || null,
         photoFileIds: draft!.photos.map((p) => p.id),
       }),
-    onSuccess: () => {
-      onOpenChange(false);
-      toast("정정했어요. 오늘 할 일도 다시 계산했어요.");
-    },
+    onSuccess: () => onOpenChange(false),
     // 실패해도 편집 내용은 그대로 둔다
     onError: (error) => toast(getErrorMessage(error, "정정하지 못했어요.")),
     onSettled: refresh,
@@ -102,22 +101,10 @@ export function EditRecordSheet({
 
   const remove = useMutation({
     mutationFn: () => recordsApi.remove(record!.id),
+    // 삭제한 기록은 되돌릴 수 없다 (C4-2)
     onSuccess: () => {
-      const id = record!.id;
       setConfirmDelete(false);
       onOpenChange(false);
-      toast("기록을 삭제했어요", {
-        action: {
-          label: "되돌리기",
-          onClick: () =>
-            recordsApi
-              .restore(id)
-              .then(refresh)
-              .catch((error) =>
-                toast(getErrorMessage(error, "복구하지 못했어요. 다시 시도해 주세요.")),
-              ),
-        },
-      });
     },
     onError: (error) => toast(getErrorMessage(error, "삭제하지 못했어요.")),
     onSettled: refresh,
@@ -150,7 +137,11 @@ export function EditRecordSheet({
                 disabled={!dirty || weightInvalid || uploading || save.isPending}
                 onClick={() => save.mutate()}
               >
-                {save.isPending ? "저장 중…" : "저장"}
+                {save.isPending ? (
+                  <LoaderCircle className="size-5 animate-spin" aria-label="저장 중" />
+                ) : (
+                  "저장"
+                )}
               </Button>
             </>
           ) : null
@@ -161,9 +152,7 @@ export function EditRecordSheet({
             <Spinner />
           </div>
         ) : isError || !record || !draft ? (
-          <p className="py-10 text-center text-[14px] text-muted-foreground">
-            기록을 찾을 수 없어요.
-          </p>
+          <LoadError onRetry={() => refetch()} />
         ) : (
           <>
             {kind === "intake" && record.type === "done" ? (
@@ -226,22 +215,6 @@ export function EditRecordSheet({
               value={draft.memo}
               onChange={(e) => setDraft({ ...draft, memo: e.target.value })}
             />
-            <p className="mt-1 text-[12px] text-[#888]">
-              {record.method === "routine" ? "할 일 체크" : "직접 기록"} ·{" "}
-              {format(parseISO(record.createdAt), "M/d HH:mm")}에 입력
-            </p>
-            {record.revisions.length ? (
-              <div className="mt-4">
-                <p className="mb-1.5 text-[13px] font-medium">정정 내역</p>
-                <ul className="space-y-1 rounded-[10px] bg-[#f5f5f5] p-3 text-[12px] text-[#666]">
-                  {record.revisions.map((r) => (
-                    <li key={r.at}>
-                      {format(parseISO(r.at), "M/d HH:mm")} · {r.summary}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
           </>
         )}
       </Sheet>
@@ -249,7 +222,7 @@ export function EditRecordSheet({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="이 기록을 삭제할까요?"
-        description="삭제한 뒤 바로 되돌릴 수 있어요. 오늘 할 일과 다음 예정일도 다시 계산돼요."
+        description="삭제한 기록은 되돌릴 수 없어요."
         confirmLabel="삭제"
         tone="danger"
         pending={remove.isPending}
@@ -260,6 +233,14 @@ export function EditRecordSheet({
         onOpenChange={(o) => !o && setViewer(null)}
         photos={draft?.photos ?? []}
         initialIndex={viewer ?? 0}
+        caption={
+          record ? (
+            <>
+              <p className="font-bold">{title}</p>
+              {record.memo ? <p>{record.memo}</p> : null}
+            </>
+          ) : null
+        }
       />
     </>
   );

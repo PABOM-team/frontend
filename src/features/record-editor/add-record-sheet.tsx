@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import { petQueries } from "@/entities/pet";
 import { recordsApi } from "@/shared/api/endpoints";
@@ -87,6 +88,8 @@ export function AddRecordSheet({
   const weightInvalid =
     kind === "weight" && (!weightValue || weightValue <= 0 || weightValue > 5000);
   const memoMissing = kind === "memo" && !memo.trim() && photos.length === 0;
+  // 급여는 먹은 정도를 골라야 저장할 수 있다 (C2-3)
+  const intakeMissing = kind === "intake" && !intake;
 
   const save = useMutation({
     mutationFn: () =>
@@ -104,20 +107,19 @@ export function AddRecordSheet({
         memo: memo.trim() || null,
         photoFileIds: photos.map((p) => p.id),
       }),
-    onSuccess: (record) => {
-      onOpenChange(false);
-      toast(
-        record.routineId
-          ? `'${CARE_ITEM_LABEL[record.careItem]}' 기록을 저장했어요 · 다음 예정일도 다시 계산했어요`
-          : "기록을 저장했어요",
-      );
-    },
+    onSuccess: () => onOpenChange(false),
     onError: (error) => toast(getErrorMessage(error, "저장하지 못했어요.")),
     onSettled: () => invalidateCareData(queryClient),
   });
 
   const canSave =
-    selectedPet && item && !weightInvalid && !memoMissing && !uploading && !save.isPending;
+    selectedPet &&
+    item &&
+    !weightInvalid &&
+    !memoMissing &&
+    !intakeMissing &&
+    !uploading &&
+    !save.isPending;
 
   return (
     <>
@@ -128,7 +130,11 @@ export function AddRecordSheet({
         footer={
           <div className="flex w-full flex-col gap-1.5">
             <Button size="xl" disabled={!canSave} onClick={() => save.mutate()}>
-              {save.isPending ? "저장 중…" : "저장"}
+              {save.isPending ? (
+                <LoaderCircle className="size-5 animate-spin" aria-label="저장 중" />
+              ) : (
+                "저장"
+              )}
             </Button>
             {uploading ? (
               <p className="text-center text-[12px] text-[#888]">
@@ -157,7 +163,7 @@ export function AddRecordSheet({
         />
         {kind === "intake" ? (
           <>
-            <SheetLabel>얼마나 먹었나요? (선택)</SheetLabel>
+            <SheetLabel>얼마나 먹었나요?</SheetLabel>
             <ChipGroup
               label="먹은 정도"
               columns={2}
