@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AddPetCard, PetCard, petQueries } from "@/entities/pet";
 import { stageName, useSpeciesMap } from "@/entities/species";
-import { Skeleton, StateMessage } from "@/shared/ui/display";
+import { LoadError, Skeleton, StateMessage } from "@/shared/ui/display";
 import { Menu } from "@/shared/ui/menu";
 import { ScreenBody } from "@/shared/ui/screen";
 import { TopBar } from "@/shared/ui/top-bar";
@@ -21,13 +21,16 @@ export function PetsScreen() {
       <TopBar
         leading="none"
         title="내 개체"
+        // 개체가 있을 때만 ⋯ (C1-2·C1-4에는 없다)
         trailing={
-          <Menu
-            label="개체 메뉴"
-            items={[
-              { label: "함께했던 개체 목록 보기", onSelect: () => router.push("/pets/archived") },
-            ]}
-          />
+          data?.length ? (
+            <Menu
+              label="개체 메뉴"
+              items={[
+                { label: "함께했던 개체 목록 보기", onSelect: () => router.push("/pets/archived") },
+              ]}
+            />
+          ) : undefined
         }
       />
       <ScreenBody className="space-y-3">
@@ -37,14 +40,7 @@ export function PetsScreen() {
             <Skeleton className="h-[94px]" />
           </>
         ) : isError ? (
-          <StateMessage
-            compact
-            icon={<span className="text-[17px] font-bold">!</span>}
-            title="불러오지 못했어요"
-            description="인터넷 연결을 확인하고 다시 시도해 주세요."
-            action={{ label: "다시 불러오기", onClick: () => refetch(), variant: "outline" }}
-            className="pt-32"
-          />
+          <LoadError onRetry={() => refetch()} className="pt-32" />
         ) : data.length === 0 ? (
           <StateMessage
             compact

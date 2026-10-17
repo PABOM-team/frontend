@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { EndedPetCard, petQueries } from "@/entities/pet";
-import { Skeleton, StateMessage } from "@/shared/ui/display";
+import { LoadError, Skeleton } from "@/shared/ui/display";
 import { Screen, ScreenBody } from "@/shared/ui/screen";
 import { TopBar } from "@/shared/ui/top-bar";
 
@@ -20,12 +20,7 @@ export function ArchivedPetsScreen() {
         {isPending ? (
           <Skeleton className="h-[94px]" />
         ) : isError ? (
-          <StateMessage
-            title="목록을 불러오지 못했어요"
-            action={{ label: "다시 시도", onClick: () => refetch() }}
-          />
-        ) : data.length === 0 ? (
-          <StateMessage icon={null} title="함께했던 개체가 없어요" className="pt-24" />
+          <LoadError onRetry={() => refetch()} />
         ) : (
           data.map((pet) => <EndedPetCard key={pet.id} pet={pet} href={`/pets/${pet.id}`} />)
         )}

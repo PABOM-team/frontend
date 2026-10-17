@@ -47,7 +47,8 @@ export function recordMethodLabel(record: Pick<CareRecord, "method">) {
 /**
  * 기록 한 줄.
  * - day: 홈 지난 날짜 (개체 이름 + '고치기 ›')
- * - list: 개체 상세·전체 기록 (날짜 머리 아래 · '›')
+ * - list: 전체 기록 (날짜 머리 아래, 사진이 있으면 썸네일·메모) · '›'
+ * - list + prefix: 개체 상세 최근 기록 ('10월 5일 · 탈피 · 사진 1', 썸네일·메모 없음)
  */
 export function RecordRow({
   record,
@@ -63,11 +64,13 @@ export function RecordRow({
   onClick: () => void;
   onPhotoClick?: () => void;
 }) {
-  const photo = record.photos[0];
+  const compact = Boolean(prefix);
+  const photo = compact ? undefined : record.photos[0];
+  // 썸네일이 보이면 '사진 N'은 제목에서 뺀다
   const title =
     variant === "day"
       ? `${record.petName} · ${describeRecord({ ...record, photos: [] })}`
-      : describeRecord(record);
+      : describeRecord(photo ? { ...record, photos: [] } : record);
 
   return (
     <div className="flex items-center gap-3 border-b border-border py-2.5">
@@ -95,7 +98,7 @@ export function RecordRow({
             {prefix ? `${prefix} · ` : null}
             {title}
           </span>
-          {record.memo ? (
+          {record.memo && !compact ? (
             <span className="block truncate text-[13px] text-[#555]">{record.memo}</span>
           ) : null}
           <span className="block text-[12px] text-[#888]">

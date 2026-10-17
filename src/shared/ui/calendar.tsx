@@ -174,6 +174,7 @@ export function DateField({
   hint,
   disabled,
   invalid,
+  format = formatFullDate,
 }: {
   id?: string;
   value: string | null;
@@ -185,6 +186,8 @@ export function DateField({
   hint?: ReactNode;
   disabled?: boolean;
   invalid?: boolean;
+  /** 칸에 보이는 날짜 모양. 기본은 '2026년 3월 2일' */
+  format?: (ymd: string) => string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -197,7 +200,7 @@ export function DateField({
         icon={<CalendarIcon className="size-[18px]" />}
         onClick={() => setOpen(true)}
       >
-        {value ? formatFullDate(value) : null}
+        {value ? format(value) : null}
       </FieldButton>
       <DatePickerSheet
         open={open}

@@ -1,6 +1,5 @@
 "use client";
 
-import { Camera } from "lucide-react";
 import { useRef, useState } from "react";
 import { filesApi } from "@/shared/api/endpoints";
 import { getErrorMessage } from "@/shared/api/errors";
@@ -54,22 +53,20 @@ export function PetPhotoPicker({
         aria-label={value.url ? "사진 바꾸기" : "사진 추가"}
         className="relative"
       >
+        {/* 등록(P02)은 점선 동그라미에 '+ 사진', 정보 수정(P05)은 동그라미만 */}
         <Avatar
           src={value.url}
           size={72}
-          className={cn(!value.url && "border-[1.5px] border-dashed border-[#bbb]")}
+          className={cn(
+            !value.url && variant !== "edit" && "border-[1.5px] border-dashed border-[#bbb]",
+          )}
         >
           {uploading ? (
             <Spinner />
-          ) : (
+          ) : variant === "edit" ? null : (
             <span className="flex items-center gap-0.5 text-[11px]">+ 사진</span>
           )}
         </Avatar>
-        {value.url ? (
-          <span className="absolute right-0 bottom-0 flex size-6 items-center justify-center rounded-full border-2 border-white bg-inverse text-white">
-            <Camera className="size-3" />
-          </span>
-        ) : null}
       </button>
       <span
         className={cn(
@@ -189,6 +186,15 @@ export function HatchFields({
               : "성체를 고르면 '정확하지 않아요'가 사라져요"}
           </p>
         </>
+      ) : auto && variant === "edit" ? (
+        // 정보 수정(P05)은 회색 글 두 줄
+        <div className="space-y-1.5 text-[13px] text-[#777]">
+          <p>생애 단계 · {auto.name} (자동)</p>
+          <p className="text-[12px] leading-relaxed text-[#999]">
+            부화일을 모르면: 단계를 직접 고르고, 해츨링·준성체일 때만 &apos;정확하지 않아요&apos;를
+            고를 수 있어요
+          </p>
+        </div>
       ) : auto ? (
         <InfoBox tone="blue">
           생애 단계 · <strong>{auto.name}</strong> (부화일 기준으로 자동)

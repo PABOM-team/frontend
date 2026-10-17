@@ -90,12 +90,11 @@ export function EditPetForm({ pet, onDelete }: { pet: Pet; onDelete: () => void 
     onSuccess: async (updated) => {
       await invalidateCareData(queryClient);
       router.replace(`/pets/${pet.id}`);
+      // 생애 단계가 바뀌었을 때만 C3-3 토스트
       if (updated.lifeStageCode !== pet.lifeStageCode) {
-        toast("생애 단계가 바뀌어 체크 리스트를 다시 제안했어요", {
+        toast("체크 리스트를 다시 제안했어요", {
           action: { label: "확인하기", onClick: () => router.push(`/pets/${pet.id}/routines`) },
         });
-      } else {
-        toast("저장했어요");
       }
     },
     onError: (error) => {

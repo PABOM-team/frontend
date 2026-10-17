@@ -18,7 +18,7 @@ import { EditRecordSheet } from "@/features/record-editor";
 import type { CareRecord } from "@/shared/domain/record";
 import { addDays, formatDayLabel, toYmd, ymdOf } from "@/shared/lib/date";
 import { cn } from "@/shared/lib/utils";
-import { Spinner, StateMessage } from "@/shared/ui/display";
+import { LoadError, Spinner } from "@/shared/ui/display";
 import { PhotoViewer } from "@/shared/ui/photo-viewer";
 import { Screen, ScreenBody } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
@@ -129,7 +129,6 @@ export function PetRecordsScreen() {
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-[12px] text-[#888]">최대 기간은 개발팀 확인 뒤 정해요.</p>
       </Sheet>
     </Screen>
   );
@@ -173,14 +172,7 @@ function MonthRecords({
       </div>
     );
   }
-  if (query.isError) {
-    return (
-      <StateMessage
-        title="기록을 불러오지 못했어요"
-        action={{ label: "다시 시도", onClick: () => query.refetch() }}
-      />
-    );
-  }
+  if (query.isError) return <LoadError onRetry={() => query.refetch()} />;
 
   const records = query.data.pages.flatMap((p) => p.items);
   const groups = new Map<string, CareRecord[]>();
@@ -191,30 +183,24 @@ function MonthRecords({
 
   return (
     <ScreenBody flush className="pt-0">
-      {records.length === 0 ? (
-        <p className="py-10 text-center text-[13px] text-muted-foreground">
-          이 달에 남긴 기록이 없어요
-        </p>
-      ) : (
-        [...groups.entries()].map(([day, items]) => (
-          <section key={day}>
-            <h2 className="bg-[#f3f3f3] px-4 py-1.5 text-[13px] text-[#555]">
-              {formatDayLabel(day)}
-            </h2>
-            <div className="px-4">
-              {items.map((record) => (
-                <RecordRow
-                  key={record.id}
-                  record={record}
-                  variant="list"
-                  onClick={() => setEditId(record.id)}
-                  onPhotoClick={() => setViewing(record)}
-                />
-              ))}
-            </div>
-          </section>
-        ))
-      )}
+      {[...groups.entries()].map(([day, items]) => (
+        <section key={day}>
+          <h2 className="bg-[#f3f3f3] px-4 py-1.5 text-[13px] text-[#555]">
+            {formatDayLabel(day)}
+          </h2>
+          <div className="px-4">
+            {items.map((record) => (
+              <RecordRow
+                key={record.id}
+                record={record}
+                variant="list"
+                onClick={() => setEditId(record.id)}
+                onPhotoClick={() => setViewing(record)}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
       <div
         ref={sentinel}
         className="flex flex-col items-center py-5 text-center text-[12px] text-[#888]"

@@ -7,7 +7,7 @@ import { petsApi } from "@/shared/api/endpoints";
 import { getErrorMessage } from "@/shared/api/errors";
 import { invalidateCareData } from "@/shared/api/query-keys";
 import { END_REASON_LABEL, endReasonSchema, type EndReason, type Pet } from "@/shared/domain/pet";
-import { todayYmd } from "@/shared/lib/date";
+import { formatDayLabel, todayYmd } from "@/shared/lib/date";
 import { josa } from "@/shared/lib/josa";
 import { Button } from "@/shared/ui/button";
 import { DateField } from "@/shared/ui/calendar";
@@ -33,19 +33,10 @@ export function ChangeStatusSheet({
 
   const change = useMutation({
     mutationFn: () => petsApi.changeStatus(pet.id, { type: "end", reason: reason!, date: date! }),
+    // 바꾼 뒤에는 내 개체(P01)로. 결과 토스트는 Figma에 없다
     onSuccess: () => {
       onOpenChange(false);
       router.replace("/pets");
-      toast(`${josa(pet.name, "을/를")} 함께했던 개체로 바꿨어요`, {
-        action: {
-          label: "되돌리기",
-          onClick: () =>
-            petsApi
-              .changeStatus(pet.id, { type: "revert" })
-              .then(() => invalidateCareData(queryClient))
-              .catch((error) => toast(getErrorMessage(error))),
-        },
-      });
     },
     onError: (error) => toast(getErrorMessage(error, "바꾸지 못했어요.")),
     onSettled: () => invalidateCareData(queryClient),
@@ -78,7 +69,13 @@ export function ChangeStatusSheet({
         onChange={setReason}
       />
       <SheetLabel>날짜</SheetLabel>
-      <DateField title="날짜" value={date} onChange={setDate} max={todayYmd()} />
+      <DateField
+        title="날짜"
+        value={date}
+        onChange={setDate}
+        max={todayYmd()}
+        format={formatDayLabel}
+      />
     </Sheet>
   );
 }
@@ -89,10 +86,7 @@ export function useRevertPetStatus(pet: Pet | undefined) {
   const router = useRouter();
   return useMutation({
     mutationFn: () => petsApi.changeStatus(pet!.id, { type: "revert" }),
-    onSuccess: () => {
-      router.replace(`/pets/${pet!.id}`);
-      toast(`${josa(pet!.name, "을/를")} 내 개체로 되돌렸어요`);
-    },
+    onSuccess: () => router.replace(`/pets/${pet!.id}`),
     onError: (error) => toast(getErrorMessage(error)),
     onSettled: () => invalidateCareData(queryClient),
   });
@@ -115,7 +109,6 @@ export function DeletePetDialog({
     onSuccess: () => {
       onOpenChange(false);
       router.replace(pet.status === "ended" ? "/pets/archived" : "/pets");
-      toast(`${josa(pet.name, "을/를")} 삭제했어요`);
     },
     onError: (error) => toast(getErrorMessage(error, "삭제하지 못했어요.")),
     onSettled: () => invalidateCareData(queryClient),

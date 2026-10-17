@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { notFound, useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { petQueries, petSpeciesLine } from "@/entities/pet";
 import { RecordRow } from "@/entities/record";
@@ -12,13 +12,11 @@ import { stageName, useSpeciesMap } from "@/entities/species";
 import { ChangeStatusSheet, DeletePetDialog, useRevertPetStatus } from "@/features/pet-lifecycle";
 import { EditRecordSheet } from "@/features/record-editor";
 import { getHttpStatus } from "@/shared/api/errors";
-import { END_REASON_LABEL, SEX_LABEL, SEX_SYMBOL } from "@/shared/domain/pet";
-import type { CareRecord } from "@/shared/domain/record";
-import { formatFullDate, ymdOf } from "@/shared/lib/date";
+import { END_REASON_LABEL, SEX_LABEL } from "@/shared/domain/pet";
+import { formatFullDate } from "@/shared/lib/date";
 import { format, parseISO } from "date-fns";
-import { Avatar, InfoBox, InfoRow, Skeleton, StateMessage } from "@/shared/ui/display";
+import { Avatar, InfoBox, InfoRow, LoadError, Skeleton } from "@/shared/ui/display";
 import { Menu } from "@/shared/ui/menu";
-import { PhotoViewer } from "@/shared/ui/photo-viewer";
 import { Screen, ScreenBody } from "@/shared/ui/screen";
 import { TopBar } from "@/shared/ui/top-bar";
 
@@ -31,7 +29,6 @@ export function PetDetailScreen() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editRecordId, setEditRecordId] = useState<string | null>(null);
-  const [viewing, setViewing] = useState<CareRecord | null>(null);
   const revert = useRevertPetStatus(data?.pet);
 
   if (isPending) {
@@ -46,25 +43,13 @@ export function PetDetailScreen() {
     );
   }
 
+  // 없는 개체(남의 개체 포함)는 E01, 그 밖의 실패는 C1-2
+  if (isError && getHttpStatus(error) === 404) notFound();
   if (isError) {
     return (
       <Screen>
         <TopBar fallbackHref="/pets" />
-        {getHttpStatus(error) === 404 ? (
-          <StateMessage
-            className="flex-1 justify-center"
-            title="개체를 찾을 수 없어요"
-            description="삭제됐거나 주소가 바뀌었어요."
-            action={{ label: "내 개체로 가기", onClick: () => router.replace("/pets") }}
-          />
-        ) : (
-          <StateMessage
-            className="flex-1 justify-center"
-            title="화면을 보여 주지 못했어요"
-            description="잠시 뒤 다시 시도해 주세요."
-            action={{ label: "다시 시도", onClick: () => refetch() }}
-          />
-        )}
+        <LoadError className="flex-1 justify-center" onRetry={() => refetch()} />
       </Screen>
     );
   }
@@ -90,10 +75,6 @@ export function PetDetailScreen() {
                 : [
                     { label: "정보 수정", onSelect: () => router.push(`/pets/${pet.id}/edit`) },
                     { label: "함께했던 개체로 바꾸기", onSelect: () => setStatusOpen(true) },
-                    {
-                      label: "인계 카드 만들기",
-                      onSelect: () => router.push(`/pets/${pet.id}/handover`),
-                    },
                     { label: "개체 삭제", tone: "danger", onSelect: () => setDeleteOpen(true) },
                   ]
             }
@@ -110,38 +91,23 @@ export function PetDetailScreen() {
         <div className="flex items-center gap-4">
           <Avatar src={pet.photoUrl} size={72} />
           <div className="min-w-0">
-            <h2 className="flex items-center gap-1.5 text-[22px] font-bold">
-              {pet.name}
-              {SEX_SYMBOL[pet.sex] ? (
-                <span className="text-[15px] text-primary" aria-label={SEX_LABEL[pet.sex]}>
-                  {SEX_SYMBOL[pet.sex]}
-                </span>
-              ) : null}
-            </h2>
+            <h2 className="text-[22px] font-bold">{pet.name}</h2>
             <p className="text-[13px] text-muted-foreground">{petSpeciesLine(pet)}</p>
-            {spec ? (
-              <p className="text-[12px] text-[#999]">
-                {spec.officialName} · <i>{spec.scientificName}</i>
-              </p>
-            ) : null}
           </div>
         </div>
 
         <div className="mt-3">
           <InfoRow label="생애 단계">
-            {stageName(spec, pet.lifeStageCode)}{" "}
-            <span className="text-[12px] text-[#999]">
-              ({pet.lifeStageSource === "hatch" ? "부화일 기준" : "직접 고름"}
-              {pet.stageUncertain ? " · 정확하지 않음" : ""})
-            </span>
+            {stageName(spec, pet.lifeStageCode)}
+            {/* 키우는 중이고 부화일로 정해진 단계일 때만 '(부화일 기준)' (Figma P04·P08) */}
+            {!ended && pet.lifeStageSource === "hatch" ? (
+              <span className="text-[12px] text-[#999]"> (부화일 기준)</span>
+            ) : null}
           </InfoRow>
           <InfoRow label="부화일">
             {pet.hatchedOn ? formatFullDate(pet.hatchedOn) : "몰라요"}
           </InfoRow>
           {!ended ? <InfoRow label="성별">{SEX_LABEL[pet.sex]}</InfoRow> : null}
-          {pet.acquiredOn && !ended ? (
-            <InfoRow label="데려온 날">{formatFullDate(pet.acquiredOn)}</InfoRow>
-          ) : null}
         </div>
 
         {!ended ? (
@@ -151,27 +117,22 @@ export function PetDetailScreen() {
           >
             <span className="shrink-0 text-[15px] font-bold">체크 리스트</span>
             <span className="min-w-0 flex-1 truncate text-right text-[13px] text-muted-foreground">
-              {routinesShortLine(routines) || "켜진 항목이 없어요"}
+              {routinesShortLine(routines)}
             </span>
             <ChevronRight className="size-4 shrink-0 text-[#888]" />
           </Link>
         ) : null}
 
         <h3 className="mt-4 mb-1 text-[14px] font-medium">최근 기록</h3>
-        {recentRecords.length === 0 ? (
-          <p className="py-4 text-[13px] text-muted-foreground">아직 남긴 기록이 없어요</p>
-        ) : (
-          recentRecords.map((record) => (
-            <RecordRow
-              key={record.id}
-              record={record}
-              variant="list"
-              prefix={format(parseISO(record.occurredAt), "M월 d일")}
-              onClick={() => setEditRecordId(record.id)}
-              onPhotoClick={() => setViewing(record)}
-            />
-          ))
-        )}
+        {recentRecords.map((record) => (
+          <RecordRow
+            key={record.id}
+            record={record}
+            variant="list"
+            prefix={format(parseISO(record.occurredAt), "M월 d일")}
+            onClick={() => setEditRecordId(record.id)}
+          />
+        ))}
         {recentRecords.length ? (
           <Link
             href={`/pets/${pet.id}/records`}
@@ -190,18 +151,6 @@ export function PetDetailScreen() {
       <EditRecordSheet
         recordId={editRecordId}
         onOpenChange={(open) => !open && setEditRecordId(null)}
-      />
-      <PhotoViewer
-        open={Boolean(viewing)}
-        onOpenChange={(o) => !o && setViewing(null)}
-        photos={viewing?.photos ?? []}
-        caption={
-          viewing ? (
-            <p className="font-bold">
-              {viewing.petName} · {formatFullDate(ymdOf(viewing.occurredAt))}
-            </p>
-          ) : null
-        }
       />
     </Screen>
   );
