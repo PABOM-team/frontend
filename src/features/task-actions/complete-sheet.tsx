@@ -1,22 +1,21 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import { recordQueries } from "@/entities/record";
 import { INTAKE_LABEL, INTAKES, RECORD_KIND, type Intake } from "@/shared/domain/care";
 import { MEMO_MAX, type CompleteInput } from "@/shared/domain/record";
 import type { Task } from "@/shared/domain/today";
-import { nowIso, yesterdaySameTimeIso } from "@/shared/lib/date";
+import { nowIso } from "@/shared/lib/date";
 import { Button } from "@/shared/ui/button";
 import { ChipGroup } from "@/shared/ui/chip";
 import { Input, Textarea } from "@/shared/ui/form";
 import { Sheet, SheetLabel } from "@/shared/ui/sheet";
 
-type When = "now" | "yesterday";
-
 /**
  * 완료 체크 시트 (SCR-H02). 급여는 먹은 결과, 체중은 g.
- * 결과는 미리 고르지 않고, 비워도 저장된다 (나중에 '결과 남기기').
+ * 값을 고르기 전에는 저장할 수 없다 (C2-3). 체중은 지난 기록을 미리 채워 둔다
  */
 export function CompleteSheet({
   task,
@@ -33,7 +32,7 @@ export function CompleteSheet({
   const [intake, setIntake] = useState<Intake | null>(null);
   const [weight, setWeight] = useState("");
   const [memo, setMemo] = useState("");
-  const [when, setWhen] = useState<When>("now");
+  const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
 
   // 새 할 일로 열릴 때마다 입력을 비운다
   if (task && task.routineId !== shown?.routineId) {
@@ -41,7 +40,7 @@ export function CompleteSheet({
     setIntake(null);
     setWeight("");
     setMemo("");
-    setWhen("now");
+    setPrefilledFor(null);
   }
 
   const current = task ?? shown;
@@ -50,8 +49,15 @@ export function CompleteSheet({
     ...recordQueries.list({ petId: current?.petId, careItem: "weight", limit: 1 }),
     enabled: kind === "weight" && Boolean(task),
   });
+  const lastWeightG = lastWeight?.items[0]?.weightG;
+  if (current && lastWeightG && prefilledFor !== current.routineId && weight === "") {
+    setPrefilledFor(current.routineId);
+    setWeight(lastWeightG.toFixed(1));
+  }
   const weightValue = weight ? Number(weight) : null;
   const weightInvalid = weight !== "" && (!weightValue || weightValue <= 0 || weightValue > 5000);
+  const missingValue =
+    (kind === "intake" && !intake) || (kind === "weight" && (!weightValue || weightInvalid));
 
   return (
     <Sheet
@@ -61,18 +67,18 @@ export function CompleteSheet({
       footer={
         <Button
           size="xl"
-          disabled={pending || weightInvalid}
+          disabled={pending || missingValue}
           onClick={() =>
             current &&
             onSubmit(current, {
-              occurredAt: when === "now" ? nowIso() : yesterdaySameTimeIso(),
+              occurredAt: nowIso(),
               intake,
               weightG: weightValue,
               memo: memo.trim() || null,
             })
           }
         >
-          {pending ? "저장 중…" : "저장"}
+          {pending ? <LoaderCircle className="size-5 animate-spin" aria-label="저장 중" /> : "저장"}
         </Button>
       }
     >
@@ -103,24 +109,8 @@ export function CompleteSheet({
             aria-invalid={weightInvalid || undefined}
             onChange={(e) => setWeight(e.target.value.replace(/[^0-9.]/g, ""))}
           />
-          {lastWeight?.items[0]?.weightG ? (
-            <p className="mt-1.5 text-[12px] text-[#888]">
-              지난 기록 {lastWeight.items[0].weightG.toFixed(1)} g (참고만 해요)
-            </p>
-          ) : null}
         </>
       ) : null}
-      <SheetLabel>언제 했나요?</SheetLabel>
-      <ChipGroup
-        label="언제"
-        size="sm"
-        options={[
-          { value: "now", label: "지금" },
-          { value: "yesterday", label: "어제" },
-        ]}
-        value={when}
-        onChange={(v) => setWhen(v ?? "now")}
-      />
       <SheetLabel>
         <label htmlFor="complete-memo">메모 (선택)</label>
       </SheetLabel>

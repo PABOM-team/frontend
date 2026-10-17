@@ -7,7 +7,7 @@ import Link from "next/link";
 import type { Pet } from "@/shared/domain/pet";
 import { fromYmd, toYmd } from "@/shared/lib/date";
 import { cn } from "@/shared/lib/utils";
-import { Avatar } from "@/shared/ui/display";
+import { Avatar, Skeleton } from "@/shared/ui/display";
 
 /** 주간 달력 (Figma 주간 캘린더). 기록·할 일이 있는 날에 점 */
 export function WeekStrip({
@@ -73,16 +73,29 @@ export function PetFilterRow({
   pets,
   selected,
   onSelect,
-  showDots,
+  loading,
 }: {
   pets: Pet[];
   selected: string | null;
   onSelect: (petId: string | null) => void;
-  showDots: boolean;
+  loading?: boolean;
 }) {
   const item = "flex w-14 shrink-0 flex-col items-center gap-1.5";
   const label = (active: boolean) =>
     cn("max-w-full truncate text-[11.5px]", active ? "font-bold text-primary" : "text-[#888]");
+
+  // 불러오는 동안은 동그라미 자리만 (C1-1)
+  if (loading) {
+    return (
+      <div className="-mx-4 flex gap-3 overflow-hidden px-4" aria-label="불러오는 중">
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className={item}>
+            <Skeleton className="size-[52px] rounded-full" />
+          </span>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="-mx-4 scrollbar-none flex gap-3 overflow-x-auto px-4">
@@ -118,7 +131,7 @@ export function PetFilterRow({
               size={52}
               className={cn(selected === pet.id && "border-0 ring-[2.5px] ring-primary")}
             />
-            {showDots && pet.todayRemaining > 0 ? (
+            {pet.todayRemaining > 0 ? (
               <span
                 aria-label="남은 할 일 있음"
                 className="absolute top-0.5 right-0.5 size-2 rounded-full border border-white bg-[#e5484d]"

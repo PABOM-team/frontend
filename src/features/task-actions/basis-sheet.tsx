@@ -7,13 +7,12 @@ import { useState } from "react";
 import { petQueries } from "@/entities/pet";
 import { routineQueries } from "@/entities/routine";
 import { CARE_DISCLAIMER, formatInterval } from "@/shared/domain/care";
-import { CARE_LABEL_TEXT } from "@/shared/domain/species";
 import type { Task } from "@/shared/domain/today";
 import { cn } from "@/shared/lib/utils";
 import { InfoBox } from "@/shared/ui/display";
 import { Sheet } from "@/shared/ui/sheet";
 
-/** 왜 이 할 일이 있나요? (SCR-H04) 주기의 근거·적용 조건·출처 */
+/** 왜 이 할 일이 있나요? (SCR-H04) 할 일·적용 조건, 펼치면 기준 링크 */
 export function BasisSheet({
   task,
   onOpenChange,
@@ -69,25 +68,15 @@ export function BasisSheet({
             <ChevronDown className="size-4 text-[#888]" />
           )}
         </button>
-        {expanded && routine ? (
-          <div className="space-y-1.5 px-3.5 pb-3.5 text-[13px] text-[#444]">
-            <p>
-              근거 라벨 · <strong>{CARE_LABEL_TEXT[routine.basis.label]}</strong>
-            </p>
-            <p>
-              기준 주기 {formatInterval(routine.standardIntervalDays)}
-              {routine.customized
-                ? ` · 내가 바꾼 주기 ${formatInterval(routine.intervalDays)}`
-                : null}
-            </p>
-            <p>출처 · {routine.basis.sourceText ?? "출처 정리 중"}</p>
-            <p>기준표 버전 · {routine.basis.version}</p>
+        {/* 펼치면 종 가이드라인(S04-3)으로 가는 링크만 있다 (Figma H04 펼침) */}
+        {expanded && detail ? (
+          <div className="px-3.5 pb-3.5 text-[13px]">
             {detail ? (
               <Link
                 href={`/settings/guidelines/${detail.pet.speciesId}`}
-                className="inline-flex items-center gap-0.5 pt-1 font-medium text-primary"
+                className="inline-flex items-center gap-0.5 font-medium text-primary"
               >
-                이러한 기준을 기반으로 제안 드렸어요
+                이러한 기준을 기반으로 제안을 드렸어요
                 <ChevronRight className="size-3.5" />
               </Link>
             ) : null}

@@ -2,7 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { todayApi } from "@/shared/api/endpoints";
 import { queryKeys } from "@/shared/api/query-keys";
-import { formatInterval, INTAKE_LABEL } from "@/shared/domain/care";
+import { formatInterval } from "@/shared/domain/care";
 import type { Task } from "@/shared/domain/today";
 import { formatMonthDay, formatTime, todayYmd } from "@/shared/lib/date";
 import { cn } from "@/shared/lib/utils";
@@ -30,19 +30,14 @@ function TaskBadge({ task }: { task: Task }) {
 function taskSubline(task: Task) {
   const interval = formatInterval(task.intervalDays);
   if (task.state === "done" && task.record) {
-    return [
-      interval,
-      task.record.intake ? INTAKE_LABEL[task.record.intake] : null,
-      task.record.weightG ? `${task.record.weightG.toFixed(1)} g` : null,
-      `${formatTime(task.record.occurredAt)} 완료`,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    return `${interval} · ${formatTime(task.record.occurredAt)} 완료`;
   }
   if (task.state === "skipped") {
     return [interval, task.record?.skipReason].filter(Boolean).join(" · ");
   }
   if (task.originalDueOn) {
+    // 앞 날짜(U1)에서는 그날로 미뤄진 것이니 '원래 날짜'만, 오늘 이후로 옮겨 온 할 일은 화살표까지 (D1)
+    if (task.state === "planned") return `원래 ${formatMonthDay(task.originalDueOn)} · ${interval}`;
     const to = task.dueOn === todayYmd() ? "오늘" : formatMonthDay(task.dueOn);
     return `원래 ${formatMonthDay(task.originalDueOn)} → ${to} · ${interval}`;
   }

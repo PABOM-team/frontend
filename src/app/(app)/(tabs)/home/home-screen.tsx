@@ -14,7 +14,7 @@ import { useTaskActions } from "@/features/task-actions";
 import { CARE_ITEM_LABEL } from "@/shared/domain/care";
 import type { CareRecord } from "@/shared/domain/record";
 import { formatDayLabel, fromYmd, toYmd, todayYmd, ymdOf } from "@/shared/lib/date";
-import { Skeleton, StateMessage } from "@/shared/ui/display";
+import { LoadError, Skeleton } from "@/shared/ui/display";
 import { PhotoViewer } from "@/shared/ui/photo-viewer";
 import { ScreenBody } from "@/shared/ui/screen";
 import { PetFilterRow, WeekStrip } from "./week-strip";
@@ -105,7 +105,7 @@ export function HomeScreen() {
           pets={pets.data ?? []}
           selected={petId}
           onSelect={setPetId}
-          showDots={mode === "today"}
+          loading={pets.isPending}
         />
 
         {pets.isPending ? (
@@ -178,15 +178,7 @@ function TaskList({
   );
 
   if (isPending) return <TaskSkeleton />;
-  if (isError) {
-    return (
-      <StateMessage
-        title="할 일을 불러오지 못했어요"
-        description="잠시 뒤 다시 시도해 주세요."
-        action={{ label: "다시 시도", onClick: () => refetch() }}
-      />
-    );
-  }
+  if (isError) return <LoadError onRetry={() => refetch()} />;
 
   if (mode === "future") {
     return (
@@ -195,11 +187,16 @@ function TaskList({
           {formatDayLabel(date)} · 예정된 할 일 {data.items.length}
         </h2>
         {data.items.map((task) => (
-          <TaskCard key={task.routineId} task={task} onOpen={() => actions.openBasis(task)} />
+          <TaskCard
+            key={task.routineId}
+            task={task}
+            onOpen={() => actions.openBasis(task)}
+            menu={actions.menuFor(task)}
+          />
         ))}
-        <p className="pt-1 text-center text-[12px] text-[#888]">
-          {data.items.length ? "예정일이 되면 체크할 수 있어요" : "이날은 예정된 할 일이 없어요"}
-        </p>
+        {data.items.length ? (
+          <p className="pt-1 text-center text-[12px] text-[#888]">예정일이 되면 체크할 수 있어요</p>
+        ) : null}
       </section>
     );
   }
@@ -226,18 +223,14 @@ function TaskList({
           menu={actions.menuFor(task)}
         />
       ))}
-      {todo.length === 0 ? (
+      {todo.length === 0 && finished.length > 0 ? (
         <div className="flex flex-col items-center rounded-[14px] border-[1.3px] border-[#ddd] px-4 py-6 text-center">
           <Check className="size-7 text-foreground" strokeWidth={1.6} aria-hidden />
-          <p className="mt-2 text-[15px] font-bold">
-            {finished.length ? "오늘 할 일을 모두 마쳤어요" : "오늘은 할 일이 없어요"}
+          <p className="mt-2 text-[15px] font-bold">오늘 할 일을 모두 마쳤어요</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            완료 {doneCount}
+            {skipCount ? ` · 건너뜀 ${skipCount}` : ""}
           </p>
-          {finished.length ? (
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              완료 {doneCount}
-              {skipCount ? ` · 건너뜀 ${skipCount}` : ""}
-            </p>
-          ) : null}
         </div>
       ) : null}
       {finished.length ? (
@@ -289,35 +282,22 @@ function PastDay({
   );
 
   if (isPending) return <TaskSkeleton />;
-  if (isError) {
-    return (
-      <StateMessage
-        title="기록을 불러오지 못했어요"
-        action={{ label: "다시 시도", onClick: () => refetch() }}
-      />
-    );
-  }
+  if (isError) return <LoadError onRetry={() => refetch()} />;
 
   return (
     <section>
       <h2 className="mb-1 text-[15px] font-bold">
         {formatDayLabel(date)} · 기록 {data.items.length}
       </h2>
-      {data.items.length === 0 ? (
-        <p className="py-6 text-center text-[13px] text-muted-foreground">
-          이날 남긴 기록이 없어요
-        </p>
-      ) : (
-        data.items.map((record) => (
-          <RecordRow
-            key={record.id}
-            record={record}
-            variant="day"
-            onClick={() => onEdit(record.id)}
-            onPhotoClick={() => setViewing(record)}
-          />
-        ))
-      )}
+      {data.items.map((record) => (
+        <RecordRow
+          key={record.id}
+          record={record}
+          variant="day"
+          onClick={() => onEdit(record.id)}
+          onPhotoClick={() => setViewing(record)}
+        />
+      ))}
       {date >= toYmd(subDays(new Date(), 365)) ? (
         <button
           type="button"

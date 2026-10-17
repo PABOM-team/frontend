@@ -8,7 +8,7 @@ import { invalidateCareData } from "@/shared/api/query-keys";
 import { CARE_ITEM_LABEL, RECORD_KIND } from "@/shared/domain/care";
 import type { CompleteInput } from "@/shared/domain/record";
 import type { Task } from "@/shared/domain/today";
-import { addDays, formatMonthDay, formatShortDay } from "@/shared/lib/date";
+import { formatShortDay } from "@/shared/lib/date";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import type { MenuItem } from "@/shared/ui/menu";
 import { toast } from "@/shared/ui/toast";
@@ -61,12 +61,9 @@ export function useTaskActions({
         return;
       }
       // 시트는 그대로 두고 다시 시도 (C3-4)
-      toast(
-        RECORD_KIND[variables.task.careItem] === "check"
-          ? "체크하지 못했어요. 연결을 확인해 주세요"
-          : "저장하지 못했어요",
-        { action: { label: "다시 시도", onClick: () => complete.mutate(variables) } },
-      );
+      toast("저장하지 못했어요", {
+        action: { label: "다시 시도", onClick: () => complete.mutate(variables) },
+      });
     },
     onSettled: () => {
       setCheckingId(null);
@@ -88,43 +85,21 @@ export function useTaskActions({
   const skip = useMutation({
     mutationFn: ({ task, reason }: { task: Task; reason: string | null }) =>
       routinesApi.skip(task.routineId, reason),
-    onSuccess: (record, { task }) => {
-      setSkipping(null);
-      toast(
-        `건너뛰었어요 · 다음 예정일 ${formatMonthDay(addDays(new Date(), task.intervalDays))}`,
-        {
-          action: { label: "되돌리기", onClick: () => undoRecord(record.id) },
-        },
-      );
-    },
+    // 건너뛴 할 일은 '완료·건너뜀'으로 옮겨 가니 토스트는 두지 않는다 (Figma에 없음)
+    onSuccess: () => setSkipping(null),
     onError: (error) => toast(getErrorMessage(error, "건너뛰지 못했어요.")),
     onSettled: refresh,
   });
 
   const disable = useMutation({
     mutationFn: (task: Task) => routinesApi.update(task.routineId, { enabled: false }),
-    onSuccess: (_, task) => {
-      setDeleting(null);
-      toast(`'${CARE_ITEM_LABEL[task.careItem]}' 할 일을 껐어요`, {
-        action: {
-          label: "되돌리기",
-          onClick: () => routinesApi.update(task.routineId, { enabled: true }).then(refresh),
-        },
-      });
-    },
+    onSuccess: () => setDeleting(null),
     onError: (error) => toast(getErrorMessage(error, "삭제하지 못했어요.")),
     onSettled: refresh,
   });
 
   const cancelRecord = useMutation({
     mutationFn: (recordId: string) => recordsApi.remove(recordId),
-    onSuccess: (_, recordId) =>
-      toast("되돌렸어요", {
-        action: {
-          label: "다시 적용",
-          onClick: () => recordsApi.restore(recordId).then(refresh),
-        },
-      }),
     onError: (error) => toast(getErrorMessage(error, "되돌리지 못했어요.")),
     onSettled: refresh,
   });
@@ -151,7 +126,13 @@ export function useTaskActions({
         { label: "수정하기", onSelect: () => onEditRoutine(task) },
       ];
     }
-    if (task.state === "planned") return [];
+    // 앞 날짜(U1)의 ⋯: 그날 할 일은 아직 체크·미루기를 못 하니 일정 자체를 고치거나 지운다
+    if (task.state === "planned") {
+      return [
+        { label: "수정하기", onSelect: () => onEditRoutine(task) },
+        { label: "삭제하기", tone: "danger", onSelect: () => setDeleting(task) },
+      ];
+    }
     return [
       { label: "수정하기", onSelect: () => onEditRoutine(task) },
       { label: "미루기", onSelect: () => setPostponing(task) },

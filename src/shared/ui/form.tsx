@@ -63,6 +63,8 @@ export const Textarea = forwardRef<
   ComponentProps<"textarea"> & { maxLength: number }
 >(function Textarea({ className, value, maxLength, ...props }, ref) {
   const length = typeof value === "string" ? value.length : 0;
+  // 글자 수를 다 채우면 칸과 글자 수를 빨갛게 (C2-3)
+  const full = length >= maxLength;
   return (
     <div>
       <textarea
@@ -70,10 +72,15 @@ export const Textarea = forwardRef<
         value={value}
         maxLength={maxLength}
         rows={3}
-        className={cn(fieldBox, "min-h-[68px] resize-none py-3 leading-relaxed", className)}
+        className={cn(
+          fieldBox,
+          "min-h-[68px] resize-none py-3 leading-relaxed",
+          full && "border-destructive",
+          className,
+        )}
         {...props}
       />
-      <p className="mt-1 text-right text-[11.5px] text-[#999]">
+      <p className={cn("mt-1 text-right text-[11.5px]", full ? "text-destructive" : "text-[#999]")}>
         {length} / {maxLength}자
       </p>
     </div>

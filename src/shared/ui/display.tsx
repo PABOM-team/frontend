@@ -262,3 +262,17 @@ export function Segmented<T extends string>({
     </div>
   );
 }
+
+/** 불러오기 실패 (C1-2). Figma에 따로 화면이 없는 목록·상세의 실패도 이 모양으로 */
+export function LoadError({ onRetry, className }: { onRetry: () => void; className?: string }) {
+  return (
+    <StateMessage
+      compact
+      icon={<span className="text-[17px] font-bold">!</span>}
+      title="불러오지 못했어요"
+      description="인터넷 연결을 확인하고 다시 시도해 주세요."
+      action={{ label: "다시 불러오기", onClick: onRetry, variant: "outline" }}
+      className={className}
+    />
+  );
+}
