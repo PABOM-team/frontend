@@ -1,11 +1,15 @@
 /**
- * 같은 주소의 /api/v1 요청을 백엔드(API_PROXY_TARGET)로 그대로 넘긴다.
+ * 로컬 개발 전용 프록시. 같은 주소의 /api/v1 요청을 백엔드(API_PROXY_TARGET)로 그대로 넘긴다.
  *
- * 브라우저가 백엔드를 직접 부르지 않는 까닭
+ * localhost에서 백엔드를 직접 부르지 않는 까닭
  * - 백엔드 CORS는 배포 웹 주소만 허용해서 localhost에서 부르면 403이다
  * - refresh·state 쿠키가 SameSite=Lax라 다른 사이트에서 부르면 저장도 전송도 안 된다
  * 같은 주소로 부르면 쿠키가 이 사이트 쿠키가 되고 CORS도 생기지 않는다.
+ *
+ * 배포에서는 웹과 백엔드가 같은 사이트(pabom.app)라 이런 문제가 없어서,
+ * 브라우저가 NEXT_PUBLIC_API_BASE_URL로 백엔드를 바로 부르고 이 프록시는 404를 준다.
  */
+const PROXY_ENABLED = process.env.NODE_ENV === "development";
 
 /** 백엔드로 넘기는 요청 헤더. Origin·Host는 빼고, 다른 사이트 요청은 여기서 막는다 */
 const REQUEST_HEADERS = ["accept", "accept-language", "authorization", "content-type", "cookie"];
@@ -27,6 +31,8 @@ function relayCookie(cookie: string, secure: boolean) {
 }
 
 export async function forward(request: Request, path: string) {
+  if (!PROXY_ENABLED) return fail(404, "NOT_FOUND", "찾을 수 없어요.");
+
   const target = process.env.API_PROXY_TARGET;
   if (!target) {
     return fail(503, "PROXY_TARGET_MISSING", "API_PROXY_TARGET이 설정되지 않았어요.");
