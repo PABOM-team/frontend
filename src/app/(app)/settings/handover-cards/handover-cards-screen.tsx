@@ -11,8 +11,7 @@ import { queryKeys } from "@/shared/api/query-keys";
 import { HANDOVER_STATUS_LABEL, type HandoverCard } from "@/shared/domain/handover";
 import { formatMonthDay, ymdOf } from "@/shared/lib/date";
 import { Button } from "@/shared/ui/button";
-import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
-import { Avatar, Badge, Skeleton, StateMessage } from "@/shared/ui/display";
+import { Avatar, Badge, LoadError, Skeleton } from "@/shared/ui/display";
 import { Screen, ScreenBody } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
 import { toast } from "@/shared/ui/toast";
@@ -35,15 +34,10 @@ export function HandoverCardsScreen() {
   const queryClient = useQueryClient();
   const { data, isPending, isError, refetch } = useQuery(handoverQueries.list());
   const [qrCard, setQrCard] = useState<HandoverCard | null>(null);
-  const [canceling, setCanceling] = useState<HandoverCard | null>(null);
   const qrRef = useRef<HTMLDivElement>(null);
 
   const cancel = useMutation({
     mutationFn: (card: HandoverCard) => handoverApi.cancel(card.code),
-    onSuccess: () => {
-      setCanceling(null);
-      toast("카드를 취소했어요. 받는 분에게 내용이 보이지 않아요.");
-    },
     onError: (error) => toast(getErrorMessage(error, "취소하지 못했어요.")),
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.handoverCards }),
   });
@@ -55,17 +49,7 @@ export function HandoverCardsScreen() {
         {isPending ? (
           <Skeleton className="h-32" />
         ) : isError ? (
-          <StateMessage
-            title="카드를 불러오지 못했어요"
-            action={{ label: "다시 시도", onClick: () => refetch() }}
-          />
-        ) : data.length === 0 ? (
-          <StateMessage
-            icon={null}
-            className="pt-24"
-            title="보낸 인계 카드가 없어요"
-            description="개체 상세의 ⋯ 메뉴에서 인계 카드를 만들 수 있어요."
-          />
+          <LoadError onRetry={() => refetch()} />
         ) : (
           data.map((card) => (
             <article key={card.code} className="rounded-[14px] border-[1.3px] border-[#ddd] p-3.5">
@@ -93,7 +77,13 @@ export function HandoverCardsScreen() {
                   <Button variant="outline" size="md" onClick={() => setQrCard(card)}>
                     QR
                   </Button>
-                  <Button variant="outline" size="md" onClick={() => setCanceling(card)}>
+                  {/* Figma대로 확인 창 없이 바로 취소 → 배지가 '취소함'으로 */}
+                  <Button
+                    variant="outline"
+                    size="md"
+                    disabled={cancel.isPending}
+                    onClick={() => cancel.mutate(card)}
+                  >
                     카드 취소
                   </Button>
                 </div>
@@ -122,16 +112,6 @@ export function HandoverCardsScreen() {
           {qrCard ? <QRCodeSVG value={qrCard.url} size={180} /> : null}
         </div>
       </Sheet>
-      <ConfirmDialog
-        open={Boolean(canceling)}
-        onOpenChange={(o) => !o && setCanceling(null)}
-        title="인계 카드를 취소할까요?"
-        description="취소하면 받는 분이 링크·QR을 열어도 내용이 보이지 않아요."
-        confirmLabel="카드 취소"
-        tone="danger"
-        pending={cancel.isPending}
-        onConfirm={() => canceling && cancel.mutate(canceling)}
-      />
     </Screen>
   );
 }

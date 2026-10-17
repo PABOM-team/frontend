@@ -110,18 +110,15 @@ export function CreateHandoverFlow({ detail }: { detail: PetDetail }) {
               />
               {scope.recordWeeks > 0 ? (
                 <p className="mt-2 text-[12px] text-[#888]">
-                  기록 {recordCount}개{scope.photos ? ` · 사진 ${photoCount}장` : ""}이 함께
-                  넘어가요
+                  {scope.photos
+                    ? `기록 ${recordCount}개 · 사진 ${photoCount}장이 함께 넘어가요`
+                    : `기록 ${recordCount}개가 함께 넘어가요`}
                 </p>
               ) : null}
             </li>
             <ScopeRow
               title="사진"
-              description={
-                scope.recordWeeks
-                  ? `기록에 붙은 사진 ${photoCount}장`
-                  : "최근 기록을 넘길 때만 고를 수 있어요"
-              }
+              description={scope.recordWeeks ? `기록에 붙은 사진 ${photoCount}장` : undefined}
               checked={scope.photos}
               disabled={scope.recordWeeks === 0}
               onChange={(photos) => setScope({ ...scope, photos })}
@@ -165,9 +162,6 @@ export function CreateHandoverFlow({ detail }: { detail: PetDetail }) {
               <Checkbox checked={agreed} onCheckedChange={(on) => setAgreed(on === true)} />이
               범위로 넘기는 데 동의해요
             </label>
-            <p className="text-[12px] leading-relaxed text-[#888]">
-              인계 카드와 양도 신고는 별개예요. 신고는 받는 분과 각자 관할 창구에 직접 해 주세요.
-            </p>
           </>
         )}
       </ScreenBody>
@@ -227,7 +221,6 @@ function HandoverResult({ card, onClose }: { card: HandoverCard; onClose: () => 
     <Screen>
       <TopBar
         title="인계 카드 만들기 · 결과"
-        leading="none"
         trailing={
           <button
             type="button"

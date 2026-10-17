@@ -802,6 +802,7 @@ export const appHandlers = [
       code: card.code,
       status,
       senderNickname: usable && card.scope.nickname ? (sender?.nickname ?? null) : null,
+      recordWeeks: usable ? card.scope.recordWeeks : 0,
       pet: usable
         ? {
             name: pet.name,

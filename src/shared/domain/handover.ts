@@ -39,6 +39,8 @@ export const handoverPreviewSchema = z.object({
   code: z.string(),
   status: handoverStatusSchema,
   senderNickname: z.string().nullable(),
+  /** 넘긴 최근 기록 기간(주). 넘기지 않았으면 0 */
+  recordWeeks: z.number().int().min(0),
   pet: z
     .object({
       name: z.string(),
