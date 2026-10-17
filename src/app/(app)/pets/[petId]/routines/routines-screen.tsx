@@ -7,12 +7,12 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { petQueries, petSpeciesLine } from "@/entities/pet";
 import { routineQueries } from "@/entities/routine";
-import { speciesQueries, stageName, useSpeciesMap } from "@/entities/species";
+import { stageName, useSpeciesMap } from "@/entities/species";
 import { RoutineEditSheet, RoutineRow } from "@/features/routine-editor";
 import { CARE_DISCLAIMER } from "@/shared/domain/care";
 import { SEX_SYMBOL, SPECIES_LABEL } from "@/shared/domain/pet";
 import { Button } from "@/shared/ui/button";
-import { Avatar, Badge, Skeleton, StateMessage } from "@/shared/ui/display";
+import { Avatar, Skeleton, StateMessage } from "@/shared/ui/display";
 import { Screen, ScreenBody, ScreenFooter } from "@/shared/ui/screen";
 import { TopBar } from "@/shared/ui/top-bar";
 
@@ -31,10 +31,6 @@ export function RoutinesScreen() {
   const detail = useQuery(petQueries.detail(petId));
   const routines = useQuery(routineQueries.list(petId));
   const pet = detail.data?.pet;
-  const standards = useQuery({
-    ...speciesQueries.careStandards(pet?.speciesId ?? "crested_gecko"),
-    enabled: Boolean(pet),
-  });
 
   const editing = routines.data?.find((r) => r.id === editId) ?? null;
   const offCount = routines.data?.filter((r) => !r.enabled).length ?? 0;
@@ -83,7 +79,6 @@ export function RoutinesScreen() {
               {SPECIES_LABEL[pet.speciesId]}·{stage}에 맞춘 체크 리스트예요.{" "}
               {offCount ? `${offCount}개 항목이 꺼져 있어요.` : "모두 켜져 있어요."} 필요 없는
               항목만 꺼 주세요.
-              {standards.data?.isDraft ? <Badge className="ml-1 align-middle">예시</Badge> : null}
             </p>
 
             <ul className="mt-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { meQueries } from "@/entities/session";
@@ -64,7 +64,8 @@ export function RegisterPetFlow({ onboarding }: { onboarding: boolean }) {
   const { data: me } = useQuery(meQueries.detail());
   const { data: speciesList, isPending: speciesPending } = useQuery(speciesQueries.list());
   const [step, setStep] = useState(1);
-  const [draft, setDraft] = useState<Draft>({ ...EMPTY, group: onboarding ? null : "lizard" });
+  // Figma(A04 A안·P02 1/4) 모두 도마뱀이 골라진 채로 시작한다
+  const [draft, setDraft] = useState<Draft>({ ...EMPTY, group: "lizard" });
   const [exitOpen, setExitOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -164,15 +165,13 @@ export function RegisterPetFlow({ onboarding }: { onboarding: boolean }) {
                 title={SPECIES_GROUP_LABEL.lizard}
                 onClick={() => patch({ group: "lizard" })}
               />
+              {/* 뱀(볼파이톤)은 MVP 범위 밖이라 고를 수 없다 (CLAUDE.md). 글은 Figma 그대로 */}
               <ChoiceCard
                 disabled
                 title={SPECIES_GROUP_LABEL.snake}
-                description="볼파이톤 · 준비 중이에요"
+                description={onboarding ? undefined : "볼파이톤"}
               />
             </div>
-            <p className="text-[12.5px] text-[#888]">
-              지금은 크레스티드 게코·레오파드 게코 두 종만 지원해요.
-            </p>
           </>
         ) : null}
 
@@ -309,11 +308,11 @@ export function RegisterPetFlow({ onboarding }: { onboarding: boolean }) {
           </Button>
         ) : (
           <Button size="xl" disabled={!canSubmit} onClick={() => create.mutate()}>
-            {create.isPending
-              ? "등록 중…"
-              : uploading
-                ? "사진 올리는 중…"
-                : "등록하고 체크 리스트 보기"}
+            {create.isPending || uploading ? (
+              <LoaderCircle className="size-5 animate-spin" aria-label="저장 중" />
+            ) : (
+              "등록하고 체크 리스트 보기"
+            )}
           </Button>
         )}
         {onboarding && step === 1 ? (
