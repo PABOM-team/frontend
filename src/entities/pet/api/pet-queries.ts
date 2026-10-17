@@ -1,13 +1,19 @@
 import { queryOptions } from "@tanstack/react-query";
-import { api } from "@/shared/api/client";
-import { petSchema } from "@/shared/domain/pet";
+import { petsApi } from "@/shared/api/endpoints";
+import { queryKeys } from "@/shared/api/query-keys";
+import type { PetStatus } from "@/shared/domain/pet";
 
-// API 스펙 확정(10/14) 후에는 orval 생성 훅으로 바꾼다. 응답은 zod로 한 번 검증한다.
+// 응답은 shared/api/endpoints에서 zod로 한 번 검증한다
 export const petQueries = {
-  all: () => ["pets"] as const,
-  list: () =>
+  all: () => queryKeys.pets,
+  list: (status: PetStatus = "active") =>
     queryOptions({
-      queryKey: [...petQueries.all(), "list"],
-      queryFn: async () => petSchema.array().parse(await api.get("pets").json()),
+      queryKey: queryKeys.petList(status),
+      queryFn: () => petsApi.list(status),
+    }),
+  detail: (petId: string) =>
+    queryOptions({
+      queryKey: queryKeys.pet(petId),
+      queryFn: () => petsApi.get(petId),
     }),
 };
