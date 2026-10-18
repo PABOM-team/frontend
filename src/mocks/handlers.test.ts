@@ -187,6 +187,76 @@ describe("목업 API", () => {
     });
   });
 
+  it("개체 목록은 백엔드 모양으로 받고, 키우는 중·함께했던 개체로 나눈다", async () => {
+    await login("kakao");
+    const active = await petsApi.list("active");
+    const ended = await petsApi.list("ended");
+    expect(active.find((p) => p.id === "p-kong")).toMatchObject({
+      name: "콩이",
+      speciesId: "crested_gecko",
+      morph: "할리퀸",
+      status: "active",
+    });
+    expect(ended.length).toBeGreaterThan(0);
+    expect(ended.every((p) => p.status === "ended")).toBe(true);
+  });
+
+  it("백엔드 목록에 없는 값(성별·상태·할 일 수·사진)은 임시 값으로 채운다", async () => {
+    server.use(
+      http.get(`${apiBaseUrl}/pets`, () =>
+        HttpResponse.json({
+          resultType: "SUCCESS",
+          success: {
+            data: [
+              {
+                id: 12,
+                name: "콩이",
+                speciesId: 1,
+                speciesName: "크레스티드 게코",
+                morphs: [{ id: 2, code: "HARLEQUIN", name: "할리퀸" }],
+                customMorph: null,
+                lifeStageId: 2,
+                lifeStageName: "준성체",
+                photoFileId: null,
+              },
+            ],
+          },
+          error: null,
+        }),
+      ),
+    );
+    await login("google");
+    expect(await petsApi.list("active")).toEqual([
+      expect.objectContaining({
+        id: "12",
+        morph: "할리퀸",
+        lifeStageCode: "juvenile",
+        sex: "unknown",
+        status: "active",
+        todayRemaining: 0,
+        photoUrl: null,
+      }),
+    ]);
+    // 백엔드는 status 조건이 없어 함께했던 개체는 비어 있다
+    expect(await petsApi.list("ended")).toEqual([]);
+  });
+
+  it("정보 수정은 바꾼 칸만 백엔드 본문으로 보낸다", async () => {
+    await login("kakao");
+    const updated = await petsApi.update("p-kong", {
+      name: "콩콩이",
+      morphIds: [],
+      customMorph: "트라이컬러",
+      sex: "FEMALE",
+      sexCertainty: "CONFIRMED",
+    });
+    expect(updated).toMatchObject({ name: "콩콩이", morph: "트라이컬러", sex: "female" });
+    expect((await petsApi.get("p-kong")).pet).toMatchObject({ name: "콩콩이" });
+    await expect(petsApi.update("p-kong", { name: " " })).rejects.toMatchObject({
+      response: { status: 422 },
+    });
+  });
+
   it("남의 개체는 404로 존재를 숨긴다", async () => {
     await login("google");
     await expect(petsApi.get("p-kong")).rejects.toMatchObject({ response: { status: 404 } });

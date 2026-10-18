@@ -11,15 +11,16 @@ import { getErrorMessage, getFieldErrors } from "@/shared/api/errors";
 import { invalidateCareData } from "@/shared/api/query-keys";
 import { isPetsOnlyLive } from "@/shared/config/env";
 import {
-  lifeStageIdOf,
+  morphFields,
+  serverFileId,
   SEX_LABEL,
+  sexFields,
   sexSchema,
-  toServerSex,
+  stageFields,
   type PetCreateInput,
   type Sex,
 } from "@/shared/domain/pet";
 import {
-  lifeStageFromHatch,
   SPECIES_GROUP_LABEL,
   type Morph,
   type Species,
@@ -41,38 +42,22 @@ import { HatchFields, MorphPicker, PetPhotoPicker, type PhotoValue } from "./fie
 
 const STEPS = ["분류", "종", "모프", "기본 정보"] as const;
 
-/** 입력한 내용을 POST /pets 본문으로. 모프는 목록에 있으면 ID, 없으면 직접 입력으로 보낸다 */
+/** 입력한 내용을 POST /pets 본문으로 */
 function toCreateInput(
   draft: Draft,
   species: Species,
   morphs: Morph[],
   clientRequestId: string,
 ): PetCreateInput {
-  const morphName = draft.morph?.trim() || null;
-  const morph = morphs.find((m) => m.name === morphName);
-  const hatchedAt = draft.hatchUnknown ? null : draft.hatchedOn;
-  const stageCode = draft.hatchUnknown
-    ? draft.lifeStageCode
-    : (lifeStageFromHatch(species, hatchedAt)?.code ?? null);
-  const lifeStageId = lifeStageIdOf(stageCode);
   return {
     clientRequestId,
     speciesId: species.serverId,
     name: draft.name.trim(),
-    morphIds: morph ? [morph.id] : [],
-    customMorph: morph ? null : morphName,
-    hatchedAt,
+    ...morphFields(draft.morph, morphs),
+    ...stageFields(species, draft),
     adoptedAt: draft.acquiredOn,
-    lifeStageId,
-    stageCertainty:
-      lifeStageId === null
-        ? "UNKNOWN"
-        : draft.hatchUnknown && draft.stageUncertain
-          ? "ESTIMATED"
-          : "CONFIRMED",
-    sex: toServerSex(draft.sex),
-    sexCertainty: draft.sex === "unknown" ? "UNKNOWN" : "CONFIRMED",
-    photoFileId: draft.photo.fileId ? Number(draft.photo.fileId) : null,
+    ...sexFields(draft.sex),
+    photoFileId: serverFileId(draft.photo.fileId),
   };
 }
 

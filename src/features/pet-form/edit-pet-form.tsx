@@ -6,9 +6,20 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { speciesQueries } from "@/entities/species";
 import { petsApi } from "@/shared/api/endpoints";
-import { getApiError, getErrorMessage } from "@/shared/api/errors";
+import { getErrorMessage, getFieldErrors } from "@/shared/api/errors";
 import { invalidateCareData } from "@/shared/api/query-keys";
-import { SEX_LABEL, sexSchema, type Pet, type PetUpdateInput, type Sex } from "@/shared/domain/pet";
+import { isPetsOnlyLive } from "@/shared/config/env";
+import {
+  morphFields,
+  serverFileId,
+  SEX_LABEL,
+  sexFields,
+  sexSchema,
+  stageFields,
+  type Pet,
+  type PetUpdateInput,
+  type Sex,
+} from "@/shared/domain/pet";
 import { todayYmd } from "@/shared/lib/date";
 import { Button } from "@/shared/ui/button";
 import { DateField } from "@/shared/ui/calendar";
@@ -54,6 +65,7 @@ export function EditPetForm({ pet, onDelete }: { pet: Pet; onDelete: () => void 
   const queryClient = useQueryClient();
   const { data: speciesList } = useQuery(speciesQueries.list());
   const species = speciesList?.find((s) => s.id === pet.speciesId);
+  const { data: morphs } = useQuery(speciesQueries.morphs(species?.serverId));
   const [draft, setDraft] = useState<Draft>(() => fromPet(pet));
   const [morphOpen, setMorphOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
@@ -70,36 +82,37 @@ export function EditPetForm({ pet, onDelete }: { pet: Pet; onDelete: () => void 
 
   const save = useMutation({
     mutationFn: () => {
-      const input: PetUpdateInput = {};
+      // 바뀐 칸만 보낸다 (PATCH는 보내지 않은 칸을 그대로 둔다)
+      let input: PetUpdateInput = {};
       if (draft.name !== original.name) input.name = draft.name.trim();
-      if (draft.morph !== original.morph) input.morph = draft.morph?.trim() || null;
-      if (draft.sex !== original.sex) input.sex = draft.sex;
-      if (draft.acquiredOn !== original.acquiredOn) input.acquiredOn = draft.acquiredOn;
-      if (draft.photo.fileId) input.photoFileId = draft.photo.fileId;
-      const hatchedOn = draft.hatchUnknown ? null : draft.hatchedOn;
-      if (hatchedOn !== pet.hatchedOn || draft.hatchUnknown !== original.hatchUnknown)
-        input.hatchedOn = hatchedOn;
-      if (draft.hatchUnknown && draft.lifeStageCode !== original.lifeStageCode) {
-        input.lifeStageCode = draft.lifeStageCode;
+      if (draft.morph !== original.morph) {
+        input = { ...input, ...morphFields(draft.morph, morphs ?? []) };
       }
-      if (draft.stageUncertain !== original.stageUncertain) {
-        input.stageUncertain = draft.stageUncertain;
-      }
+      if (draft.sex !== original.sex) input = { ...input, ...sexFields(draft.sex) };
+      if (draft.acquiredOn !== original.acquiredOn) input.adoptedAt = draft.acquiredOn;
+      if (draft.photo.fileId) input.photoFileId = serverFileId(draft.photo.fileId);
+      // 부화일·단계·정확성은 백엔드가 함께 검증하니 하나라도 바뀌면 같이 보낸다
+      const stageChanged =
+        draft.hatchUnknown !== original.hatchUnknown ||
+        draft.hatchedOn !== original.hatchedOn ||
+        draft.lifeStageCode !== original.lifeStageCode ||
+        draft.stageUncertain !== original.stageUncertain;
+      if (stageChanged && species) input = { ...input, ...stageFields(species, draft) };
       return petsApi.update(pet.id, input);
     },
     onSuccess: async (updated) => {
       await invalidateCareData(queryClient);
       router.replace(`/pets/${pet.id}`);
-      // 생애 단계가 바뀌었을 때만 C3-3 토스트
-      if (updated.lifeStageCode !== pet.lifeStageCode) {
+      // 생애 단계가 바뀌었을 때만 C3-3 토스트. 개체만 진짜로 보낼 때는 체크 리스트가 없어 띄우지 않는다
+      if (!isPetsOnlyLive && updated.lifeStageCode !== pet.lifeStageCode) {
         toast("체크 리스트를 다시 제안했어요", {
           action: { label: "확인하기", onClick: () => router.push(`/pets/${pet.id}/routines`) },
         });
       }
     },
     onError: (error) => {
-      const fields = getApiError(error)?.fields;
-      if (fields?.name) setNameError(fields.name);
+      const fields = getFieldErrors(error);
+      if (fields.name) setNameError(fields.name);
       toast(getErrorMessage(error, "저장하지 못했어요."));
     },
   });
@@ -120,12 +133,15 @@ export function EditPetForm({ pet, onDelete }: { pet: Pet; onDelete: () => void 
         }
       />
       <ScreenBody className="space-y-5">
-        <PetPhotoPicker
-          variant="edit"
-          value={draft.photo}
-          onChange={(photo) => patch({ photo })}
-          onBusyChange={setUploading}
-        />
+        {/* 개체만 진짜로 보낼 때는 사진 업로드가 목업이라 백엔드가 그 파일 ID를 모른다 */}
+        {!isPetsOnlyLive ? (
+          <PetPhotoPicker
+            variant="edit"
+            value={draft.photo}
+            onChange={(photo) => patch({ photo })}
+            onBusyChange={setUploading}
+          />
+        ) : null}
         <Field label="이름" htmlFor="edit-name" error={nameError}>
           <Input
             id="edit-name"

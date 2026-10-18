@@ -139,9 +139,19 @@ const petDetailResponseSchema = successEnvelope(
 export type PetDetail = { pet: Pet; routines: Routine[]; recentRecords: CareRecord[] };
 
 export const petsApi = {
-  /** API-20 (아직 목업 모양) */
-  list: (status: PetStatus = "active") =>
-    api.get("pets", { searchParams: { status } }).json(z.array(petSchema)),
+  /**
+   * API-20 내 개체 목록 (최근 등록 순). 백엔드는 아직 status 조건이 없어 모두 키우는 중으로 온다.
+   * 그래서 받은 뒤 상태로 한 번 더 거른다 (목업은 status 조건을 받는다)
+   */
+  list: async (status: PetStatus = "active"): Promise<Pet[]> => {
+    const [rows, species] = await Promise.all([
+      api
+        .get("pets", { searchParams: { status } })
+        .json(successEnvelope(z.array(petResponseSchema))),
+      speciesForPets(),
+    ]);
+    return rows.map((row) => toPet(row, species)).filter((pet) => pet.status === status);
+  },
   /** API-21 개체 등록만 한다 (기본 관리 일정은 만들지 않는다) */
   create: async (input: PetCreateInput): Promise<Pet> => {
     const res = await api.post("pets", { json: input }).json(successEnvelope(petResponseSchema));
@@ -154,12 +164,16 @@ export const petsApi = {
       .json(petDetailResponseSchema);
     return { pet: toPet(res, await speciesForPets()), routines, recentRecords };
   },
-  /** API-23 */
-  update: (petId: string, input: PetUpdateInput) =>
-    api.patch(`pets/${petId}`, { json: input }).json(petSchema),
-  /** API-24 소프트 삭제 */
+  /** API-23 보낸 칸만 바꾼다 */
+  update: async (petId: string, input: PetUpdateInput): Promise<Pet> => {
+    const res = await api
+      .patch(`pets/${petId}`, { json: input })
+      .json(successEnvelope(petResponseSchema));
+    return toPet(res, await speciesForPets());
+  },
+  /** API-24 소프트 삭제 (백엔드 미구현이라 목업) */
   remove: (petId: string) => api.delete(`pets/${petId}`).then(noContent),
-  /** API-26 함께했던 개체로 바꾸기·되돌리기 */
+  /** API-26 함께했던 개체로 바꾸기·되돌리기 (백엔드 미구현이라 목업) */
   changeStatus: (petId: string, input: PetStatusChangeInput) =>
     api.post(`pets/${petId}/status-changes`, { json: input }).json(petSchema),
 };

@@ -9,7 +9,7 @@ import { appHandlers, authHandlers, petHandlers, speciesHandlers } from "./handl
  * 요청이 목업을 거치지 않고 진짜 서버로 새는 문제가 있었다.
  *
  * NEXT_PUBLIC_API_LIVE에 auth가 있으면 로그인·약관 동의를, species가 있으면 종·모프 조회를,
- * pets가 있으면 개체 등록·상세를 가로채지 않고 진짜 백엔드로 보낸다.
+ * pets가 있으면 개체 목록·등록·상세·수정을 가로채지 않고 진짜 백엔드로 보낸다.
  */
 export const network = defineNetwork({
   sources: [new InterceptorSource({ interceptors: [new FetchInterceptor()] })],

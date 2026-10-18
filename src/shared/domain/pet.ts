@@ -4,6 +4,7 @@ import {
   LIFE_STAGES,
   morphSchema,
   speciesIdSchema,
+  type Morph,
   type Species,
 } from "./species";
 
@@ -97,6 +98,9 @@ export type PetCreateInput = {
   photoFileId: number | null;
 };
 
+/** PATCH /pets/{id} 본문. 보낸 칸만 바꾸고, null을 보내면 그 값을 지운다 */
+export type PetUpdateInput = Partial<Omit<PetCreateInput, "clientRequestId" | "speciesId">>;
+
 export const toServerSex = (sex: Sex) => serverSexSchema.parse(sex.toUpperCase());
 
 /** 생애 단계 code ↔ 백엔드 lifeStageId [가정] LIFE_STAGES 참고 */
@@ -104,10 +108,53 @@ export const lifeStageIdOf = (code: string | null | undefined) =>
   LIFE_STAGES.find((s) => s.code === code)?.id ?? null;
 const lifeStageCodeOf = (id: number | null) => LIFE_STAGES.find((s) => s.id === id)?.code ?? null;
 
+/** 고른 모프 이름 → 본문. 목록에 있는 모프면 ID, 없으면 직접 입력으로 보낸다 */
+export function morphFields(name: string | null, morphs: Morph[]) {
+  const trimmed = name?.trim() || null;
+  const morph = morphs.find((m) => m.name === trimmed);
+  return { morphIds: morph ? [morph.id] : [], customMorph: morph ? null : trimmed };
+}
+
 /**
- * GET /pets/{id}, POST /pets 응답의 개체 (백엔드 PetResponse).
- * 지금은 온보딩 입력값만 온다. 상태·사진 주소·오늘 할 일 수·기록 수는 아직 없어 기본값으로 둔다
- * (목업은 채워 준다). TODO 체크리스트·기록 구현 후 백엔드 스펙에 맞춘다
+ * 부화일·생애 단계 → 본문. 부화일을 알면 단계를 계산해 CONFIRMED,
+ * 모르면 고른 단계를 보내고 '정확하지 않아요'면 ESTIMATED
+ */
+export function stageFields(
+  species: Pick<Species, "lifeStages">,
+  v: {
+    hatchedOn: string | null;
+    hatchUnknown: boolean;
+    lifeStageCode: string | null;
+    stageUncertain: boolean;
+  },
+) {
+  const hatchedAt = v.hatchUnknown ? null : v.hatchedOn;
+  const code = v.hatchUnknown
+    ? v.lifeStageCode
+    : (lifeStageFromHatch(species, hatchedAt)?.code ?? null);
+  const lifeStageId = lifeStageIdOf(code);
+  const stageCertainty: Certainty =
+    lifeStageId === null
+      ? "UNKNOWN"
+      : v.hatchUnknown && v.stageUncertain
+        ? "ESTIMATED"
+        : "CONFIRMED";
+  return { hatchedAt, lifeStageId, stageCertainty };
+}
+
+/** 성별 → 본문. 앱에는 '정확성' 입력이 없어 고르면 CONFIRMED, 모름이면 UNKNOWN [가정] */
+export const sexFields = (sex: Sex) => ({
+  sex: toServerSex(sex),
+  sexCertainty: (sex === "unknown" ? "UNKNOWN" : "CONFIRMED") as Certainty,
+});
+
+/** 화면의 사진 파일 ID(문자열) → 백엔드 파일 ID(숫자) */
+export const serverFileId = (fileId: string | null) => (fileId ? Number(fileId) : null);
+
+/**
+ * 개체 응답 (백엔드 PetResponse·PetListResponse).
+ * 백엔드가 아직 주지 않는 값은 아래 기본값(임시 데이터)으로 채운다. 목업은 진짜 값을 준다.
+ * TODO 체크리스트·기록·사진 조회가 생기면 백엔드 스펙에 맞춘다
  */
 export const petResponseSchema = z.object({
   /** 백엔드는 숫자, 목업은 문자열 */
@@ -116,18 +163,26 @@ export const petResponseSchema = z.object({
   name: z.string(),
   morphs: z.array(morphSchema).default([]),
   customMorph: z.string().nullish(),
+  /** 목록 응답에는 없다 → 모름 */
   hatchedAt: z.iso.date().nullish(),
   adoptedAt: z.iso.date().nullish(),
   lifeStageId: z.number().int().nullish(),
   stageCertainty: certaintySchema.default("UNKNOWN"),
+  /** 목록 응답에는 없다 → 모름 */
   sex: serverSexSchema.default("UNKNOWN"),
   photoFileId: z.union([z.number().int(), z.string()]).nullish(),
-  createdAt: z.iso.datetime({ offset: true, local: true }),
+  /** 목록 응답에는 없다 */
+  createdAt: z.iso.datetime({ offset: true, local: true }).nullish(),
+  // ── 백엔드에 아직 없는 값 (임시 데이터) ─────────────────
+  /** 함께했던 개체 기능이 없어 모두 키우는 중 */
   status: petStatusSchema.default("active"),
   endReason: endReasonSchema.nullish(),
   endedOn: z.iso.date().nullish(),
+  /** photoFileId로 주소를 받는 API(GET /files/{id})를 아직 안 붙여서 기본 사진 */
   photoUrl: z.string().nullish(),
+  /** 체크 리스트가 없어 0 */
   todayRemaining: z.number().int().min(0).default(0),
+  /** 기록이 없어 0 */
   recordCount: z.number().int().min(0).default(0),
   firstRecordOn: z.iso.date().nullish(),
 });
@@ -156,24 +211,12 @@ export function toPet(res: PetResponse, speciesList: Species[]): Pet {
     status: res.status,
     endReason: res.endReason ?? null,
     endedOn: res.endedOn ?? null,
-    createdAt: res.createdAt,
+    createdAt: res.createdAt ?? "",
     todayRemaining: res.todayRemaining,
     recordCount: res.recordCount,
     firstRecordOn: res.firstRecordOn ?? null,
   };
 }
-
-/** PATCH /pets/{id} 본문 (아직 목업 모양) */
-export type PetUpdateInput = Partial<{
-  name: string;
-  morph: string | null;
-  sex: Sex;
-  hatchedOn: string | null;
-  lifeStageCode: string | null;
-  stageUncertain: boolean;
-  acquiredOn: string | null;
-  photoFileId: string | null;
-}>;
 
 export type PetStatusChangeInput =
   { type: "end"; reason: EndReason; date: string } | { type: "revert" };

@@ -14,7 +14,7 @@ import type { CompleteInput, RecordCreateInput, RecordUpdateInput } from "@/shar
 import type { RoutineUpdateInput } from "@/shared/domain/routine";
 import { LIFE_STAGES, type SpeciesId } from "@/shared/domain/species";
 import { authProviderSchema } from "@/shared/domain/user";
-import { careStandardTable, MORPHS, SPECIES_DATA, SPECIES_ROWS } from "./data";
+import { careStandardTable, MORPHS, serverIdOf, SPECIES_DATA, SPECIES_ROWS } from "./data";
 import {
   addRoutines,
   db,
@@ -342,8 +342,24 @@ export const speciesHandlers = [
   }),
 ];
 
-/** 개체 등록·상세 (백엔드 모양). NEXT_PUBLIC_API_LIVE에 pets가 있으면 진짜로 보낸다 */
+/** 개체 목록·등록·상세·수정 (백엔드 모양). NEXT_PUBLIC_API_LIVE에 pets가 있으면 진짜로 보낸다 */
 export const petHandlers = [
+  http.get(
+    url("/pets"),
+    authed(({ request, user }) => {
+      // 백엔드는 status 조건이 아직 없지만, 목업은 함께했던 개체 화면을 위해 받는다
+      const status = new URL(request.url).searchParams.get("status") ?? "active";
+      const pets = db.pets
+        .filter((p) => p.userId === user.id && !p.deletedAt && p.status === status)
+        .sort((a, b) =>
+          status === "ended"
+            ? (b.endedOn ?? "").localeCompare(a.endedOn ?? "")
+            : a.createdAt.localeCompare(b.createdAt),
+        );
+      return success(pets.map(serializePetResponse));
+    }),
+  ),
+
   http.post(
     url("/pets"),
     authed(async ({ request, user }) => {
@@ -396,6 +412,60 @@ export const petHandlers = [
       return success(petDetail(pet.id));
     }),
   ),
+
+  http.patch(
+    url("/pets/:petId"),
+    authed(async ({ request, params, user }) => {
+      const pet = myPet(user, params.petId);
+      if (!pet) return notFound();
+      const input = (await request.json()) as PetUpdateInput;
+      const beforeStage = stageCodeOf(pet);
+
+      if (input.name !== undefined) {
+        const name = input.name.trim();
+        if (!name || name.length > 20) {
+          const message = name ? "20자까지 쓸 수 있어요" : "이름을 입력해 주세요";
+          return fail(422, "VALIDATION_FAILED", "입력한 값을 확인해 주세요.", { name: message });
+        }
+        pet.name = name;
+      }
+      if (input.morphIds !== undefined || input.customMorph !== undefined) {
+        const serverId = serverIdOf(pet.speciesId);
+        const names = (input.morphIds ?? []).map(
+          (id) => MORPHS[serverId]?.find((m) => m.id === id)?.name,
+        );
+        pet.morph = [...names, input.customMorph?.trim()].filter(Boolean).join(", ") || null;
+      }
+      if (input.sex !== undefined) pet.sex = input.sex.toLowerCase() as Sex;
+      if (input.adoptedAt !== undefined) pet.acquiredOn = input.adoptedAt;
+      if (input.hatchedAt !== undefined) pet.hatchedOn = input.hatchedAt;
+      if (input.lifeStageId !== undefined || input.hatchedAt !== undefined) {
+        const code = LIFE_STAGES.find((s) => s.id === input.lifeStageId)?.code ?? null;
+        pet.manualStageCode = pet.hatchedOn ? null : (code ?? pet.manualStageCode);
+      }
+      if (input.stageCertainty !== undefined) {
+        pet.stageUncertain = !pet.hatchedOn && input.stageCertainty === "ESTIMATED";
+      }
+      if (input.photoFileId !== undefined) {
+        pet.photoUrl = db.files.find((f) => f.id === String(input.photoFileId))?.url ?? null;
+      }
+
+      // 생애 단계가 바뀌면 직접 바꾸지 않은 주기를 새 단계 기준으로 다시 제안 (목업만)
+      const afterStage = stageCodeOf(pet);
+      if (afterStage !== beforeStage) {
+        const fresh = { ...db, routines: [] as typeof db.routines };
+        addRoutines(fresh, pet.id, pet.speciesId, afterStage, new Date());
+        for (const routine of db.routines.filter((r) => r.petId === pet.id)) {
+          const next = fresh.routines.find((r) => r.careItem === routine.careItem);
+          if (!next) continue;
+          const customized = routine.intervalDays !== routine.standardIntervalDays;
+          routine.standardIntervalDays = next.standardIntervalDays;
+          if (!customized) routine.intervalDays = next.intervalDays;
+        }
+      }
+      return success(serializePetResponse(pet));
+    }),
+  ),
 ];
 
 /** 백엔드에 아직 없는 API. 로그인이 진짜여도 목업이 답한다 */
@@ -429,65 +499,7 @@ export const appHandlers = [
     return HttpResponse.json(careStandardTable(speciesId));
   }),
 
-  // ── 개체 ───────────────────────────────────────────────
-  http.get(
-    url("/pets"),
-    authed(({ request, user }) => {
-      const status = new URL(request.url).searchParams.get("status") ?? "active";
-      const pets = db.pets
-        .filter((p) => p.userId === user.id && !p.deletedAt && p.status === status)
-        .sort((a, b) =>
-          status === "ended"
-            ? (b.endedOn ?? "").localeCompare(a.endedOn ?? "")
-            : a.createdAt.localeCompare(b.createdAt),
-        );
-      return HttpResponse.json(pets.map(serializePet));
-    }),
-  ),
-
-  http.patch(
-    url("/pets/:petId"),
-    authed(async ({ request, params, user }) => {
-      const pet = myPet(user, params.petId);
-      if (!pet) return notFound();
-      const input = (await request.json()) as PetUpdateInput;
-      const beforeStage = stageCodeOf(pet);
-
-      if (input.name !== undefined) pet.name = input.name.trim();
-      if (input.morph !== undefined) pet.morph = input.morph;
-      if (input.sex !== undefined) pet.sex = input.sex;
-      if (input.acquiredOn !== undefined) pet.acquiredOn = input.acquiredOn;
-      if (input.hatchedOn !== undefined) {
-        pet.hatchedOn = input.hatchedOn;
-        if (input.hatchedOn) pet.manualStageCode = null;
-      }
-      if (input.lifeStageCode !== undefined && !pet.hatchedOn) {
-        pet.manualStageCode = input.lifeStageCode;
-      }
-      if (input.stageUncertain !== undefined) {
-        pet.stageUncertain = !pet.hatchedOn && input.stageUncertain;
-      }
-      if (input.photoFileId !== undefined) {
-        pet.photoUrl = db.files.find((f) => f.id === input.photoFileId)?.url ?? null;
-      }
-
-      // 생애 단계가 바뀌면 직접 바꾸지 않은 주기를 새 단계 기준으로 다시 제안
-      const afterStage = stageCodeOf(pet);
-      if (afterStage !== beforeStage) {
-        const fresh = { ...db, routines: [] as typeof db.routines };
-        addRoutines(fresh, pet.id, pet.speciesId, afterStage, new Date());
-        for (const routine of db.routines.filter((r) => r.petId === pet.id)) {
-          const next = fresh.routines.find((r) => r.careItem === routine.careItem);
-          if (!next) continue;
-          const customized = routine.intervalDays !== routine.standardIntervalDays;
-          routine.standardIntervalDays = next.standardIntervalDays;
-          if (!customized) routine.intervalDays = next.intervalDays;
-        }
-      }
-      return HttpResponse.json(serializePet(pet));
-    }),
-  ),
-
+  // ── 개체 (삭제·상태 바꾸기는 백엔드에 아직 없다) ─────────
   http.delete(
     url("/pets/:petId"),
     authed(({ params, user }) => {
