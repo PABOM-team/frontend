@@ -30,6 +30,19 @@ describe("로컬 개발 전용 프록시", () => {
     );
   });
 
+  it("동의 화면에서 취소해도 error 파라미터를 그대로 넘긴다 (Sec-Fetch-Mode 없는 브라우저 포함)", async () => {
+    const response = await callbackGet(
+      new Request("https://pabom.app/api/v1/auth/google/callback?error=access_denied", {
+        headers: { accept: "text/html,application/xhtml+xml" },
+      }),
+      { params: Promise.resolve({ provider: "google" }) },
+    );
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "https://pabom.app/auth/callback/google?error=access_denied",
+    );
+  });
+
   it("화면이 fetch로 부른 콜백은 배포에서 넘기지 않는다 (화면이 백엔드를 바로 부른다)", async () => {
     const response = await callbackGet(
       new Request("https://pabom.app/api/v1/auth/kakao/callback?code=abc&state=xyz", {

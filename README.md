@@ -31,11 +31,11 @@ pnpm dev
 
 같은 코드를 환경 변수만 바꿔 세 곳에 배포한다. `NEXT_PUBLIC_` 값은 빌드할 때 들어가므로 바꾸면 다시 배포한다.
 
-| 환경               | 용도                               | `NEXT_PUBLIC_API_BASE_URL`  | `NEXT_PUBLIC_API_MOCKING` | `NEXT_PUBLIC_API_LIVE` |
-| ------------------ | ---------------------------------- | --------------------------- | ------------------------- | ---------------------- |
-| 데모 서버          | 화면 시연. 백엔드 없이 전부 목업   | (비움)                      | `enabled`                 | (비움)                 |
-| 개발 서버 (dev)    | 백엔드 연동. 없는 API만 목업       | `https://dev.api.pabom.app` | `enabled`                 | `auth`                 |
-| 운영 서버          | 실서비스                           | `https://api.pabom.app`     | `disabled`                | (비움)                 |
+| 환경            | 용도                             | `NEXT_PUBLIC_API_BASE_URL`  | `NEXT_PUBLIC_API_MOCKING` | `NEXT_PUBLIC_API_LIVE` |
+| --------------- | -------------------------------- | --------------------------- | ------------------------- | ---------------------- |
+| 데모 서버       | 화면 시연. 백엔드 없이 전부 목업 | (비움)                      | `enabled`                 | (비움)                 |
+| 개발 서버 (dev) | 백엔드 연동. 없는 API만 목업     | `https://dev.api.pabom.app` | `enabled`                 | `auth`                 |
+| 운영 서버       | 실서비스                         | `https://api.pabom.app`     | `disabled`                | (비움)                 |
 
 - 데모 서버는 로그인도 목업이라 카카오·구글 콘솔이나 백엔드 설정이 필요 없다. 데이터는 보는 사람 브라우저에만 저장된다
 - 개발 서버는 백엔드 API가 생기는 대로 `NEXT_PUBLIC_API_LIVE`에 묶음을 늘리고, 다 생기면 목업을 끈다
@@ -53,9 +53,12 @@ pnpm dev
 허용해 403이 나고, refresh·state 쿠키가 `SameSite=Lax`라 다른 사이트에서는 저장되지 않기 때문이다. 배포에서는 웹과 백엔드가 같은
 사이트라 브라우저가 `NEXT_PUBLIC_API_BASE_URL`로 백엔드를 바로 부르고, 프록시 경로는 404를 준다 (콜백 경로의 화면 이동만 남는다).
 
-**백엔드 설정이 필요하다.** 지금 dev 서버의 Redirect URI는 `https://dev.api.pabom.app/api/v1/auth/{provider}/callback`이라
-카카오·구글 로그인 뒤 백엔드 JSON 화면에서 멈춘다. 로컬에서 끝까지 하려면 dev 서버의 `KAKAO_REDIRECT_URI`·`GOOGLE_REDIRECT_URI`를
-`http://localhost:3000/api/v1/auth/{provider}/callback`으로 바꾸고 카카오 디벨로퍼스·Google Cloud 콘솔에 같은 주소를 등록해야 한다.
+**Redirect URI.** dev 백엔드의 Redirect URI는 `https://dev.pabom.app/api/v1/auth/{provider}/callback`이다 (2026-10-18 확인).
+그래서 개발 서버(dev.pabom.app) 배포에서는 로그인이 끝까지 된다. 콜백 응답(가입 토큰·access 토큰)은 개발자 도구 Network 탭의
+`dev.api.pabom.app/api/v1/auth/{provider}/callback` 요청에서 볼 수 있다. 로컬(`pnpm dev`)에서 끝까지 하려면 dev 서버의
+`KAKAO_REDIRECT_URI`·`GOOGLE_REDIRECT_URI`를 `http://localhost:3000/api/v1/auth/{provider}/callback`으로 바꾸고
+카카오 디벨로퍼스·Google Cloud 콘솔에 같은 주소를 등록해야 한다 (지금은 로컬에서 로그인해도 dev.pabom.app으로 돌아가고,
+state 쿠키는 localhost 쪽에 있어서 맞지 않는다).
 
 ## 스크립트
 

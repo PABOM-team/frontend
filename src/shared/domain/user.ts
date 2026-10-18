@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { successEnvelope } from "./envelope";
+import { bareOrEnveloped, successEnvelope } from "./envelope";
 
 export const authProviderSchema = z.enum(["kakao", "google"]);
 export type AuthProvider = z.infer<typeof authProviderSchema>;
@@ -35,30 +35,32 @@ export const loginUrlSchema = successEnvelope(z.object({ authorizationUrl: z.url
  * API-01 인가 코드로 로그인한 결과.
  * 새 회원은 약관 동의에만 쓰는 가입 토큰(10분), 기존 회원은 access 토큰(refresh는 httpOnly 쿠키)
  */
-export const oauthLoginSchema = z.union([
-  z.object({
-    signupToken: z.string(),
-    expiresIn: z.number(),
-    isNewUser: z.boolean(),
-    user: accountSchema,
-  }),
-  z.object({
-    accessToken: z.string(),
-    expiresIn: z.number(),
-    isNewUser: z.boolean(),
-    user: accountSchema,
-  }),
-]);
+export const oauthLoginSchema = bareOrEnveloped(
+  z.union([
+    z.object({
+      signupToken: z.string(),
+      expiresIn: z.number(),
+      isNewUser: z.boolean(),
+      user: accountSchema,
+    }),
+    z.object({
+      accessToken: z.string(),
+      expiresIn: z.number(),
+      isNewUser: z.boolean(),
+      user: accountSchema,
+    }),
+  ]),
+);
 export type OAuthLoginResult = z.infer<typeof oauthLoginSchema>;
 
 /** API-05 약관 동의로 가입을 마치면 access 토큰이 나온다 */
-export const agreementCompletionSchema = z.object({
-  user: accountSchema,
-  accessToken: z.string(),
-  expiresIn: z.number(),
-});
+export const agreementCompletionSchema = bareOrEnveloped(
+  z.object({ user: accountSchema, accessToken: z.string(), expiresIn: z.number() }),
+);
 
-export const tokenSchema = z.object({ accessToken: z.string(), expiresIn: z.number().optional() });
+export const tokenSchema = bareOrEnveloped(
+  z.object({ accessToken: z.string(), expiresIn: z.number().optional() }),
+);
 
 /** 약관 버전. 백엔드 최신 버전과 다르면 409 AGREEMENT_VERSION_MISMATCH */
 export const AGREEMENT_VERSION = "1.0";

@@ -16,18 +16,23 @@ type LoginOutcome =
 
 /** 인가 코드 없이 돌아온 경우 (동의 화면에서 취소 등) */
 class LoginCanceled extends Error {}
+/** 인가 코드는 있는데 state가 없는 경우. 백엔드가 CSRF 검사를 못 하니 부르지 않는다 */
+class MissingState extends Error {}
 
 /**
- * 카카오·구글이 /api/v1/auth/{provider}/callback으로 돌려보내면 그 경로가 code·state를 붙여
- * 이 화면으로 보낸다(목업은 바로 이 화면으로 온다). 이 화면이 백엔드 콜백 API를 불러
- * 새 회원이면 가입 토큰, 기존 회원이면 access 토큰과 refresh 쿠키를 받는다
+ * 카카오·구글이 백엔드 Redirect URI(이 웹의 /api/v1/auth/{provider}/callback)로 돌려보내면
+ * 그 경로가 code·state를 붙여 이 화면으로 보낸다(목업은 바로 이 화면으로 온다).
+ * 이 화면이 백엔드 콜백 API(GET /auth/{provider}/callback?code&state)를 credentials: include로 불러
+ * 새 회원이면 가입 토큰, 기존 회원이면 access 토큰과 refresh 쿠키를 받는다.
+ * state 쿠키는 로그인 주소를 받을 때 백엔드 주소에 저장돼 있어서 이 요청에 같이 실린다
  */
 async function resolveLogin(
   provider: AuthProvider,
   code: string | null,
   state: string | null,
 ): Promise<LoginOutcome> {
-  if (!code || !state) throw new LoginCanceled();
+  if (!code) throw new LoginCanceled();
+  if (!state) throw new MissingState();
 
   const login = await authApi.callback(provider, { code, state });
   const user = { id: login.user.id, nickname: login.user.nickname };
@@ -67,6 +72,8 @@ export function LoginCallback() {
     },
     onError: (error) => {
       if (!(error instanceof LoginCanceled)) {
+        // 응답 모양이 스키마와 다르면 화면에는 일반 문구만 나오니, 원인은 콘솔에 남긴다
+        console.error("[auth] 로그인 콜백 실패", error);
         toast(getErrorMessage(error, FAILED));
       }
       router.replace("/welcome");
