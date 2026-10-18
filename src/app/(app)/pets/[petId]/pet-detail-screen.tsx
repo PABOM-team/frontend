@@ -117,13 +117,17 @@ export function PetDetailScreen() {
           >
             <span className="shrink-0 text-[15px] font-bold">체크 리스트</span>
             <span className="min-w-0 flex-1 truncate text-right text-[13px] text-muted-foreground">
-              {routinesShortLine(routines)}
+              {routinesShortLine(routines) || "아직 없어요"}
             </span>
             <ChevronRight className="size-4 shrink-0 text-[#888]" />
           </Link>
         ) : null}
 
         <h3 className="mt-4 mb-1 text-[14px] font-medium">최근 기록</h3>
+        {/* 지금 백엔드 상세 응답에는 체크 리스트·최근 기록이 없어 빈 목록으로 온다 */}
+        {!recentRecords.length ? (
+          <p className="py-3 text-[13px] text-muted-foreground">아직 기록이 없어요</p>
+        ) : null}
         {recentRecords.map((record) => (
           <RecordRow
             key={record.id}

@@ -1,11 +1,11 @@
 import { addDays, differenceInCalendarDays, format, max as maxDate, parseISO } from "date-fns";
 import { careTitle, ROUTINE_CARE_ITEMS } from "@/shared/domain/care";
-import type { Pet } from "@/shared/domain/pet";
+import { lifeStageIdOf, toServerSex, type Pet } from "@/shared/domain/pet";
 import type { CareRecord } from "@/shared/domain/record";
 import { getOccurrences, type Routine } from "@/shared/domain/routine";
 import { lifeStageFromHatch, SPECIES_LABEL } from "@/shared/domain/species";
 import type { Task, Today } from "@/shared/domain/today";
-import { CARE_STANDARD_VERSION, SPECIES_DATA } from "./data";
+import { CARE_STANDARD_VERSION, MORPHS, serverIdOf, SPECIES_DATA } from "./data";
 import { db, ymd, type DbPet, type DbRecord, type DbRoutine } from "./db";
 
 /**
@@ -127,6 +127,40 @@ export function serializePet(pet: DbPet): Pet {
         : 0,
     recordCount: records.length,
     firstRecordOn: firstRecord ? dateOf(firstRecord) : null,
+  };
+}
+
+/**
+ * 백엔드 PetResponse 모양 (GET /pets/{id}, POST /pets).
+ * 상태·사진 주소·오늘 할 일 수·기록 수는 백엔드에 아직 없지만, 목업 화면을 위해 같이 준다
+ */
+export function serializePetResponse(pet: DbPet) {
+  const serverId = serverIdOf(pet.speciesId);
+  const morph = MORPHS[serverId]?.find((m) => m.name === pet.morph);
+  const { status, endReason, endedOn, photoUrl, todayRemaining, recordCount, firstRecordOn } =
+    serializePet(pet);
+  return {
+    id: pet.id,
+    speciesId: serverId,
+    name: pet.name,
+    morphs: morph ? [{ id: morph.id, code: morph.code, name: morph.name }] : [],
+    customMorph: morph ? null : pet.morph,
+    hatchedAt: pet.hatchedOn,
+    adoptedAt: pet.acquiredOn,
+    lifeStageId: lifeStageIdOf(stageCodeOf(pet)),
+    stageCertainty: pet.manualStageCode && pet.stageUncertain ? "ESTIMATED" : "CONFIRMED",
+    sex: toServerSex(pet.sex),
+    sexCertainty: pet.sex === "unknown" ? "UNKNOWN" : "CONFIRMED",
+    photoFileId: null,
+    createdAt: pet.createdAt,
+    updatedAt: pet.createdAt,
+    status,
+    endReason,
+    endedOn,
+    photoUrl,
+    todayRemaining,
+    recordCount,
+    firstRecordOn,
   };
 }
 

@@ -362,3 +362,9 @@ export function nextId(prefix: string) {
   db.seq += 1;
   return `${prefix}-${db.seq}`;
 }
+
+/** 백엔드처럼 숫자 id가 필요한 곳(파일)에 쓴다 */
+export function nextNumericId() {
+  db.seq += 1;
+  return String(db.seq);
+}

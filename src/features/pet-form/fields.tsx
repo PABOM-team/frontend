@@ -1,6 +1,8 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
+import { speciesQueries } from "@/entities/species";
 import { filesApi } from "@/shared/api/endpoints";
 import { getErrorMessage } from "@/shared/api/errors";
 import { lifeStageFromHatch, type Species } from "@/shared/domain/species";
@@ -9,7 +11,7 @@ import { resizeImage } from "@/shared/lib/image";
 import { cn } from "@/shared/lib/utils";
 import { DateField } from "@/shared/ui/calendar";
 import { ChipGroup } from "@/shared/ui/chip";
-import { Avatar, InfoBox, Spinner } from "@/shared/ui/display";
+import { Avatar, InfoBox, Skeleton, Spinner } from "@/shared/ui/display";
 import { Checkbox, Field, Input } from "@/shared/ui/form";
 import { toast } from "@/shared/ui/toast";
 
@@ -206,7 +208,7 @@ export function HatchFields({
 
 const MORPH_MAX = 40;
 
-/** 모프 칩 2열 + 기타(직접 입력) (P02 3/4, U4) */
+/** 모프 칩 2열 + 기타(직접 입력) (P02 3/4, U4). 모프 목록은 종별 모프 API로 불러온다 */
 export function MorphPicker({
   species,
   value,
@@ -216,9 +218,15 @@ export function MorphPicker({
   value: string | null;
   onChange: (morph: string | null) => void;
 }) {
-  const known = species?.morphs ?? [];
-  const [other, setOther] = useState(Boolean(value && !known.includes(value)));
+  const { data: morphs, isPending } = useQuery(speciesQueries.morphs(species?.serverId));
+  const known = (morphs ?? []).map((m) => m.name);
+  // 목록에 없는 이름이면 '기타'. 목록을 불러온 뒤에 정해지도록 고른 값만 상태로 둔다
+  const [otherPicked, setOther] = useState<boolean | null>(null);
+  const other = otherPicked ?? Boolean(value && !known.includes(value));
   const choice = other ? "__other" : value;
+
+  // 모프를 못 불러오면(isPending이 풀리면) 기타(직접 입력)만 보인다
+  if (isPending) return <Skeleton className="h-40" />;
 
   return (
     <div className="space-y-3">

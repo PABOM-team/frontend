@@ -1,8 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { authApi, meApi, petsApi, recordsApi, routinesApi, todayApi } from "@/shared/api/endpoints";
+import { http, HttpResponse } from "msw";
+import { apiBaseUrl } from "@/shared/api/client";
+import {
+  authApi,
+  meApi,
+  petsApi,
+  recordsApi,
+  routinesApi,
+  speciesApi,
+  todayApi,
+} from "@/shared/api/endpoints";
 import { clearSession, setAccessToken, setStoredAccount } from "@/shared/api/session";
 import { todayYmd } from "@/shared/lib/date";
 import { resetDb } from "./db";
+import { server } from "./node";
 
 /** 로그인 주소 → (카카오·구글 대신 목업이 넘겨 준) 인가 코드로 콜백 */
 async function callback(provider: "kakao" | "google") {
@@ -82,24 +93,98 @@ describe("목업 API", () => {
     });
   });
 
-  it("개체를 등록하면 기준표대로 일정이 생기고 첫 예정일은 오늘이다", async () => {
+  it("종·모프는 로그인 없이 부르고, MVP 밖의 종(볼파이톤)은 목록에서 빠진다", async () => {
+    const species = await speciesApi.list();
+    expect(species.map((s) => [s.id, s.serverId])).toEqual([
+      ["crested_gecko", 1],
+      ["leopard_gecko", 2],
+    ]);
+    const morphs = await speciesApi.morphs(species[1]!.serverId);
+    expect(morphs[0]).toMatchObject({ id: 8, code: "NORMAL", name: "노멀" });
+    await expect(speciesApi.morphs(999)).rejects.toMatchObject({ response: { status: 404 } });
+  });
+
+  it("공개 API에는 access 토큰을 싣지 않는다", async () => {
+    let authorization: string | null = "unset";
+    server.use(
+      http.get(`${apiBaseUrl}/species`, ({ request }) => {
+        authorization = request.headers.get("Authorization");
+        return HttpResponse.json({ resultType: "SUCCESS", success: { data: [] }, error: null });
+      }),
+    );
+    setAccessToken("some-token");
+    await speciesApi.list();
+    expect(authorization).toBeNull();
+  });
+
+  it("개체 등록은 백엔드 본문(숫자 ID·대문자 값)으로 보내고 앱 개체로 받는다", async () => {
     await login("google");
     const pet = await petsApi.create({
-      name: "모찌",
-      speciesId: "crested_gecko",
-      morph: null,
-      sex: "unknown",
-      hatchedOn: null,
-      lifeStageCode: "adult",
-      stageUncertain: false,
-      acquiredOn: null,
+      clientRequestId: "550e8400-e29b-41d4-a716-446655440000",
+      speciesId: 1,
+      name: " 모찌 ",
+      morphIds: [2],
+      customMorph: null,
+      hatchedAt: null,
+      adoptedAt: null,
+      lifeStageId: 2,
+      stageCertainty: "ESTIMATED",
+      sex: "FEMALE",
+      sexCertainty: "CONFIRMED",
       photoFileId: null,
     });
-    const routines = await routinesApi.list(pet.id);
-    expect(routines.map((r) => r.careItem).sort()).toEqual(
-      ["cleaning", "feeding", "misting", "shed", "weight"].sort(),
+    expect(pet).toMatchObject({
+      name: "모찌",
+      speciesId: "crested_gecko",
+      morph: "할리퀸",
+      sex: "female",
+      lifeStageCode: "juvenile",
+      lifeStageSource: "manual",
+      stageUncertain: true,
+    });
+    const detail = await petsApi.get(pet.id);
+    expect(detail.pet).toEqual(pet);
+  });
+
+  it("개체 상세에 체크 리스트·최근 기록이 없어도 빈 목록으로 받는다", async () => {
+    server.use(
+      http.get(`${apiBaseUrl}/pets/12`, () =>
+        HttpResponse.json({
+          resultType: "SUCCESS",
+          success: {
+            data: {
+              id: 12,
+              speciesId: 2,
+              name: "콩이",
+              morphs: [],
+              customMorph: "트라이컬러",
+              hatchedAt: "2026-03-02",
+              adoptedAt: null,
+              lifeStageId: null,
+              stageCertainty: "UNKNOWN",
+              sex: "UNKNOWN",
+              sexCertainty: "UNKNOWN",
+              photoFileId: null,
+              createdAt: "2026-10-18T07:52:18.222",
+              updatedAt: "2026-10-18T07:52:18.222",
+            },
+          },
+          error: null,
+        }),
+      ),
     );
-    expect(routines.every((r) => r.nextDueOn === todayYmd())).toBe(true);
+    await login("google");
+    const detail = await petsApi.get("12");
+    expect(detail.routines).toEqual([]);
+    expect(detail.recentRecords).toEqual([]);
+    expect(detail.pet).toMatchObject({
+      id: "12",
+      speciesId: "leopard_gecko",
+      morph: "트라이컬러",
+      status: "active",
+      lifeStageSource: "hatch",
+      todayRemaining: 0,
+    });
   });
 
   it("남의 개체는 404로 존재를 숨긴다", async () => {

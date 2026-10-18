@@ -4,14 +4,36 @@ import { apiBaseUrl } from "@/shared/api/client";
 import { getStoredAccount } from "@/shared/api/session";
 import { CARE_ITEM_LABEL, INTAKE_LABEL, type CareItem, type Intake } from "@/shared/domain/care";
 import type { HandoverAcceptInput, HandoverPreview, HandoverScope } from "@/shared/domain/handover";
-import type { PetCreateInput, PetStatusChangeInput, PetUpdateInput } from "@/shared/domain/pet";
+import type {
+  PetCreateInput,
+  PetStatusChangeInput,
+  PetUpdateInput,
+  Sex,
+} from "@/shared/domain/pet";
 import type { CompleteInput, RecordCreateInput, RecordUpdateInput } from "@/shared/domain/record";
 import type { RoutineUpdateInput } from "@/shared/domain/routine";
-import type { SpeciesId } from "@/shared/domain/species";
+import { LIFE_STAGES, type SpeciesId } from "@/shared/domain/species";
 import { authProviderSchema } from "@/shared/domain/user";
-import { careStandardTable, SPECIES_DATA } from "./data";
-import { addRoutines, db, nextId, save, ymd, type DbCard, type DbRecord, type DbUser } from "./db";
-import { buildToday, serializePet, serializeRecord, serializeRoutine, stageCodeOf } from "./logic";
+import { careStandardTable, MORPHS, SPECIES_DATA, SPECIES_ROWS } from "./data";
+import {
+  addRoutines,
+  db,
+  nextId,
+  nextNumericId,
+  save,
+  ymd,
+  type DbCard,
+  type DbRecord,
+  type DbUser,
+} from "./db";
+import {
+  buildToday,
+  serializePet,
+  serializePetResponse,
+  serializeRecord,
+  serializeRoutine,
+  stageCodeOf,
+} from "./logic";
 
 const url = (path: string) => `${apiBaseUrl}${path}`;
 
@@ -28,8 +50,8 @@ function fail(status: number, code: string, message: string, fields?: Record<str
 }
 
 /** 백엔드 공통 성공 응답 {resultType:"SUCCESS", success:{data}} */
-function success(data: unknown) {
-  return HttpResponse.json({ resultType: "SUCCESS", success: { data }, error: null });
+function success(data: unknown, init?: ResponseInit) {
+  return HttpResponse.json({ resultType: "SUCCESS", success: { data }, error: null }, init);
 }
 
 /** 인계 카드 링크는 프론트 주소로 만든다 */
@@ -149,10 +171,11 @@ function newToken() {
   return db.session.token;
 }
 
+/** 개체 상세. 백엔드는 아직 개체 정보만 주지만 목업은 체크 리스트·최근 기록도 같이 준다 */
 function petDetail(petId: string) {
   const pet = db.pets.find((p) => p.id === petId)!;
   return {
-    pet: serializePet(pet),
+    ...serializePetResponse(pet),
     routines: db.routines.filter((r) => r.petId === petId).map(serializeRoutine),
     recentRecords: db.records
       .filter((r) => r.petId === petId && !r.deletedAt)
@@ -301,6 +324,24 @@ export const authHandlers = [
   }),
 ];
 
+/** 종·모프 조회 (로그인 없이 부르는 공개 API). NEXT_PUBLIC_API_LIVE에 species가 있으면 진짜로 보낸다 */
+export const speciesHandlers = [
+  http.get(url("/species"), async () => {
+    await wait();
+    return success(SPECIES_ROWS);
+  }),
+
+  http.get(url("/species/:speciesId/morphs"), async ({ params }) => {
+    await wait();
+    const serverId = Number(params.speciesId);
+    if (!Number.isInteger(serverId)) {
+      return fail(400, "VALIDATION_FAILED", "요청값이 누락되었거나 올바르지 않습니다.");
+    }
+    const morphs = MORPHS[serverId];
+    return morphs ? success(morphs) : notFound();
+  }),
+];
+
 /** 백엔드에 아직 없는 API. 로그인이 진짜여도 목업이 답한다 */
 export const appHandlers = [
   // ── 내 정보 ─────────────────────────────────────────────
@@ -324,12 +365,7 @@ export const appHandlers = [
     }),
   ),
 
-  // ── 종·관리 기준 ────────────────────────────────────────
-  http.get(url("/species"), async () => {
-    await wait();
-    return HttpResponse.json(SPECIES_DATA);
-  }),
-
+  // ── 관리 기준 ──────────────────────────────────────────
   http.get(url("/species/:speciesId/care-standards"), async ({ params }) => {
     await wait();
     const speciesId = params.speciesId as SpeciesId;
@@ -357,23 +393,30 @@ export const appHandlers = [
     url("/pets"),
     authed(async ({ request, user }) => {
       const input = (await request.json()) as PetCreateInput;
-      if (!input.name?.trim()) {
-        return fail(422, "VALIDATION", "입력한 값을 확인해 주세요.", {
-          name: "이름을 입력해 주세요",
-        });
+      const name = input.name?.trim() ?? "";
+      if (!name || name.length > 20) {
+        const message = name ? "20자까지 쓸 수 있어요" : "이름을 입력해 주세요";
+        return fail(422, "VALIDATION_FAILED", "입력한 값을 확인해 주세요.", { name: message });
       }
-      const photo = db.files.find((f) => f.id === input.photoFileId);
+      const species = SPECIES_DATA.find((s) => s.serverId === input.speciesId);
+      if (!species) return notFound();
+      const morphNames = (input.morphIds ?? []).map(
+        (id) => MORPHS[species.serverId]?.find((m) => m.id === id)?.name,
+      );
+      const morph = [...morphNames, input.customMorph?.trim()].filter(Boolean).join(", ") || null;
+      const stageCode = LIFE_STAGES.find((s) => s.id === input.lifeStageId)?.code ?? null;
+      const photo = db.files.find((f) => f.id === String(input.photoFileId));
       const pet = {
         id: nextId("p"),
         userId: user.id,
-        name: input.name.trim(),
-        speciesId: input.speciesId,
-        morph: input.morph,
-        sex: input.sex,
-        hatchedOn: input.hatchedOn,
-        manualStageCode: input.hatchedOn ? null : input.lifeStageCode,
-        stageUncertain: !input.hatchedOn && Boolean(input.stageUncertain),
-        acquiredOn: input.acquiredOn,
+        name,
+        speciesId: species.id,
+        morph,
+        sex: (input.sex?.toLowerCase() ?? "unknown") as Sex,
+        hatchedOn: input.hatchedAt ?? null,
+        manualStageCode: input.hatchedAt ? null : stageCode,
+        stageUncertain: !input.hatchedAt && input.stageCertainty === "ESTIMATED",
+        acquiredOn: input.adoptedAt ?? null,
         photoUrl: photo?.url ?? null,
         status: "active" as const,
         endReason: null,
@@ -382,9 +425,10 @@ export const appHandlers = [
         deletedAt: null,
       };
       db.pets.push(pet);
-      // 첫 예정일은 등록 당일 [제안]
+      // 백엔드는 등록만 하고 일정을 만들지 않는다. 목업은 데모 화면을 위해 기준표대로 만들어 둔다
+      // (첫 예정일은 등록 당일 [제안]). TODO 체크리스트 API가 생기면 그 스펙에 맞춘다
       addRoutines(db, pet.id, pet.speciesId, stageCodeOf(pet), new Date());
-      return HttpResponse.json(serializePet(pet), { status: 201 });
+      return success(serializePetResponse(pet), { status: 201 });
     }),
   ),
 
@@ -394,7 +438,7 @@ export const appHandlers = [
       const pet = myPet(user, params.petId);
       // 남의 개체도 '찾을 수 없음'으로 보여 존재 여부를 숨긴다
       if (!pet) return notFound();
-      return HttpResponse.json(petDetail(pet.id));
+      return success(petDetail(pet.id));
     }),
   ),
 
@@ -748,7 +792,8 @@ export const appHandlers = [
       let binary = "";
       for (const byte of bytes) binary += String.fromCharCode(byte);
       const dataUrl = `data:${file.type || "image/jpeg"};base64,${btoa(binary)}`;
-      const saved = { id: nextId("f"), url: dataUrl, ownerId: user.id };
+      // 백엔드 파일 ID는 숫자다 (개체 등록 photoFileId)
+      const saved = { id: nextNumericId(), url: dataUrl, ownerId: user.id };
       db.files.push(saved);
       return HttpResponse.json({ id: saved.id, url: saved.url }, { status: 201 });
     }),
@@ -894,4 +939,4 @@ export const appHandlers = [
   http.get(url("/health"), () => HttpResponse.json({ status: "ok" })),
 ];
 
-export const handlers = [...authHandlers, ...appHandlers];
+export const handlers = [...authHandlers, ...speciesHandlers, ...appHandlers];

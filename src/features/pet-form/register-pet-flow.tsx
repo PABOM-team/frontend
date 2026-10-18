@@ -7,10 +7,24 @@ import { useState } from "react";
 import { meQueries } from "@/entities/session";
 import { speciesQueries } from "@/entities/species";
 import { petsApi } from "@/shared/api/endpoints";
-import { getApiError, getErrorMessage } from "@/shared/api/errors";
+import { getErrorMessage, getFieldErrors } from "@/shared/api/errors";
 import { invalidateCareData } from "@/shared/api/query-keys";
-import { SEX_LABEL, sexSchema, type Sex } from "@/shared/domain/pet";
-import { SPECIES_GROUP_LABEL, type SpeciesGroup, type SpeciesId } from "@/shared/domain/species";
+import {
+  lifeStageIdOf,
+  SEX_LABEL,
+  sexSchema,
+  toServerSex,
+  type PetCreateInput,
+  type Sex,
+} from "@/shared/domain/pet";
+import {
+  lifeStageFromHatch,
+  SPECIES_GROUP_LABEL,
+  type Morph,
+  type Species,
+  type SpeciesGroup,
+  type SpeciesId,
+} from "@/shared/domain/species";
 import { todayYmd } from "@/shared/lib/date";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
@@ -25,6 +39,41 @@ import { TopBar, TopBarAction } from "@/shared/ui/top-bar";
 import { HatchFields, MorphPicker, PetPhotoPicker, type PhotoValue } from "./fields";
 
 const STEPS = ["분류", "종", "모프", "기본 정보"] as const;
+
+/** 입력한 내용을 POST /pets 본문으로. 모프는 목록에 있으면 ID, 없으면 직접 입력으로 보낸다 */
+function toCreateInput(
+  draft: Draft,
+  species: Species,
+  morphs: Morph[],
+  clientRequestId: string,
+): PetCreateInput {
+  const morphName = draft.morph?.trim() || null;
+  const morph = morphs.find((m) => m.name === morphName);
+  const hatchedAt = draft.hatchUnknown ? null : draft.hatchedOn;
+  const stageCode = draft.hatchUnknown
+    ? draft.lifeStageCode
+    : (lifeStageFromHatch(species, hatchedAt)?.code ?? null);
+  const lifeStageId = lifeStageIdOf(stageCode);
+  return {
+    clientRequestId,
+    speciesId: species.serverId,
+    name: draft.name.trim(),
+    morphIds: morph ? [morph.id] : [],
+    customMorph: morph ? null : morphName,
+    hatchedAt,
+    adoptedAt: draft.acquiredOn,
+    lifeStageId,
+    stageCertainty:
+      lifeStageId === null
+        ? "UNKNOWN"
+        : draft.hatchUnknown && draft.stageUncertain
+          ? "ESTIMATED"
+          : "CONFIRMED",
+    sex: toServerSex(draft.sex),
+    sexCertainty: draft.sex === "unknown" ? "UNKNOWN" : "CONFIRMED",
+    photoFileId: draft.photo.fileId ? Number(draft.photo.fileId) : null,
+  };
+}
 
 type Draft = {
   group: SpeciesGroup | null;
@@ -70,32 +119,24 @@ export function RegisterPetFlow({ onboarding }: { onboarding: boolean }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
+  // 같은 화면에서 다시 눌러도 한 마리만 등록되도록 요청 ID를 한 번만 만든다
+  const [clientRequestId] = useState(() => crypto.randomUUID());
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
   const species = speciesList?.find((s) => s.id === draft.speciesId);
+  const { data: morphs } = useQuery(speciesQueries.morphs(species?.serverId));
   const dirty = JSON.stringify(draft) !== JSON.stringify({ ...EMPTY, group: draft.group });
   const exit = () => router.replace(onboarding ? "/home" : "/pets");
 
   const create = useMutation({
-    mutationFn: () =>
-      petsApi.create({
-        name: draft.name.trim(),
-        speciesId: draft.speciesId!,
-        morph: draft.morph?.trim() || null,
-        sex: draft.sex,
-        hatchedOn: draft.hatchUnknown ? null : draft.hatchedOn,
-        lifeStageCode: draft.hatchUnknown ? draft.lifeStageCode : null,
-        stageUncertain: draft.hatchUnknown && draft.stageUncertain,
-        acquiredOn: draft.acquiredOn,
-        photoFileId: draft.photo.fileId,
-      }),
+    mutationFn: () => petsApi.create(toCreateInput(draft, species!, morphs ?? [], clientRequestId)),
     onSuccess: async (pet) => {
       await invalidateCareData(queryClient);
       router.replace(`/pets/${pet.id}/routines?from=register`);
     },
     onError: (error) => {
-      const fields = getApiError(error)?.fields;
-      if (fields?.name) setNameError(fields.name);
+      const fields = getFieldErrors(error);
+      if (fields.name) setNameError(fields.name);
       toast(getErrorMessage(error, "등록하지 못했어요."));
     },
   });
@@ -107,6 +148,7 @@ export function RegisterPetFlow({ onboarding }: { onboarding: boolean }) {
   const canSubmit =
     draft.name.trim().length > 0 &&
     (draft.hatchUnknown ? Boolean(draft.lifeStageCode) : Boolean(draft.hatchedOn)) &&
+    Boolean(species) &&
     !uploading &&
     !create.isPending;
 

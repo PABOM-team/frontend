@@ -19,7 +19,7 @@ pnpm dev
 | `API_PROXY_TARGET`         | 로컬 개발 전용. 브라우저가 같은 주소의 `/api/v1`을 부르면 Next 프록시가 이 백엔드로 넘긴다 (서버 전용)                |
 | `NEXT_PUBLIC_API_BASE_URL` | 브라우저가 부르는 백엔드 주소. **배포에서는 꼭 넣는다**(예: `https://api.pabom.app`). 로컬에서는 비워서 프록시를 탄다 |
 | `NEXT_PUBLIC_API_MOCKING`  | `enabled`면 백엔드에 아직 없는 API를 MSW가 답한다 (`src/mocks/handlers.ts`)                                           |
-| `NEXT_PUBLIC_API_LIVE`     | 목업 모드에서도 진짜로 보낼 API 묶음. `auth` = 로그인·약관 동의. 비우면 로그인도 목업                                 |
+| `NEXT_PUBLIC_API_LIVE`     | 목업 모드에서도 진짜로 보낼 API 묶음. `auth` = 로그인·약관 동의, `species` = 종·모프 조회. 비우면 전부 목업           |
 
 - 목업 로그인(`NEXT_PUBLIC_API_LIVE` 비움): **카카오 = 기록이 쌓인 기존 회원(유나)**, **구글 = 처음 가입하는 회원**(약관 → 개체 등록 흐름)
 - 목업 데이터는 브라우저 localStorage(`pabom-mock-db`)에 저장된다. 브라우저 콘솔에서 `pabomMock.reset()`으로 초기화 (화면은 Figma 그대로 두려고 버튼을 두지 않는다)
@@ -34,7 +34,7 @@ pnpm dev
 | 환경            | 용도                             | `NEXT_PUBLIC_API_BASE_URL`  | `NEXT_PUBLIC_API_MOCKING` | `NEXT_PUBLIC_API_LIVE` |
 | --------------- | -------------------------------- | --------------------------- | ------------------------- | ---------------------- |
 | 데모 서버       | 화면 시연. 백엔드 없이 전부 목업 | (비움)                      | `enabled`                 | (비움)                 |
-| 개발 서버 (dev) | 백엔드 연동. 없는 API만 목업     | `https://dev.api.pabom.app` | `enabled`                 | `auth`                 |
+| 개발 서버 (dev) | 백엔드 연동. 없는 API만 목업     | `https://dev.api.pabom.app` | `enabled`                 | `auth,species`         |
 | 운영 서버       | 실서비스                         | `https://api.pabom.app`     | `disabled`                | (비움)                 |
 
 - 데모 서버는 로그인도 목업이라 카카오·구글 콘솔이나 백엔드 설정이 필요 없다. 데이터는 보는 사람 브라우저에만 저장된다

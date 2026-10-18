@@ -10,6 +10,14 @@ export const speciesQueries = {
       queryFn: speciesApi.list,
       staleTime: Infinity,
     }),
+  /** 종별 모프 (로그인 없이 부른다). 종을 고르기 전에는 부르지 않는다 */
+  morphs: (serverId: number | undefined) =>
+    queryOptions({
+      queryKey: queryKeys.morphs(serverId ?? 0),
+      queryFn: () => speciesApi.morphs(serverId!),
+      enabled: serverId !== undefined,
+      staleTime: Infinity,
+    }),
   careStandards: (speciesId: SpeciesId) =>
     queryOptions({
       queryKey: queryKeys.careStandards(speciesId),

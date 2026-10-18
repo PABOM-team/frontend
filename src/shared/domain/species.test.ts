@@ -3,9 +3,9 @@ import { lifeStageFromHatch } from "./species";
 
 const species = {
   lifeStages: [
-    { code: "hatchling", name: "해츨링", minAgeDays: 0, criteria: "" },
-    { code: "juvenile", name: "준성체", minAgeDays: 90, criteria: "" },
-    { code: "adult", name: "성체", minAgeDays: 365, criteria: "" },
+    { id: 1, code: "hatchling", name: "해츨링", minAgeDays: 0, criteria: "" },
+    { id: 2, code: "juvenile", name: "준성체", minAgeDays: 90, criteria: "" },
+    { id: 3, code: "adult", name: "성체", minAgeDays: 365, criteria: "" },
   ],
 };
 

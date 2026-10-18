@@ -17,28 +17,99 @@ export const SPECIES_GROUPS = ["lizard", "snake"] as const;
 export type SpeciesGroup = (typeof SPECIES_GROUPS)[number];
 export const SPECIES_GROUP_LABEL: Record<SpeciesGroup, string> = { lizard: "도마뱀", snake: "뱀" };
 
-export const lifeStageSchema = z.object({
+/** 백엔드 종 코드 → 앱의 종 id. 여기 없는 종(볼파이톤)은 MVP 밖이라 목록에서 뺀다 */
+export const SPECIES_CODE: Record<string, SpeciesId> = {
+  CRESTED: "crested_gecko",
+  LEOPARD: "leopard_gecko",
+};
+
+export type LifeStage = {
+  /** 백엔드 lifeStageId [가정] 해츨링 1 · 준성체 2 · 성체 3 (단계 목록 API가 아직 없다) */
+  id: number;
+  code: string;
+  name: string;
+  /** 부화 후 이 일수부터 이 단계 [미확정] 10/10 공동 기획에서 확정 */
+  minAgeDays: number;
+  criteria: string;
+};
+
+/** 생애 단계 경계는 [미확정] 10/10 공동 기획 값이 나오면 바꾼다 */
+export const LIFE_STAGES: LifeStage[] = [
+  { id: 1, code: "hatchling", name: "해츨링", minAgeDays: 0, criteria: "부화 후 3개월 미만" },
+  { id: 2, code: "juvenile", name: "준성체", minAgeDays: 90, criteria: "부화 후 3개월~1년" },
+  { id: 3, code: "adult", name: "성체", minAgeDays: 365, criteria: "부화 후 1년 이상" },
+];
+
+/** 종 API가 주지 않는 값. TODO 백엔드가 단계·이름 정보를 주면 API 값으로 바꾼다 */
+const SPECIES_INFO: Record<
+  SpeciesId,
+  Pick<Species, "officialName" | "scientificName" | "aliases" | "defaultFoodName">
+> = {
+  crested_gecko: {
+    officialName: "속눈썹도마뱀부치",
+    scientificName: "Correlophus ciliatus",
+    aliases: ["크레", "크레스티드", "볏도마뱀붙이"],
+    defaultFoodName: "인공 사료",
+  },
+  leopard_gecko: {
+    officialName: "표범도마뱀부치",
+    scientificName: "Eublepharis macularius",
+    aliases: ["레오", "레오파드", "표범게코"],
+    defaultFoodName: "귀뚜라미",
+  },
+};
+
+/** GET /species 한 줄 (공개 API) */
+export const speciesResponseSchema = z.object({
+  id: z.number().int(),
+  code: z.string(),
+  commonName: z.string(),
+  category: z.enum(["LIZARD", "SNAKE"]),
+  displayOrder: z.number().int(),
+});
+export type SpeciesResponse = z.infer<typeof speciesResponseSchema>;
+
+export type Species = {
+  id: SpeciesId;
+  /** 백엔드 종 ID. 모프 조회·개체 등록에 쓴다 */
+  serverId: number;
+  group: SpeciesGroup;
+  commonName: string;
+  officialName: string;
+  scientificName: string;
+  aliases: string[];
+  lifeStages: LifeStage[];
+  defaultFoodName: string;
+};
+
+/** 백엔드 종 목록을 앱 종 목록으로. MVP 밖의 종은 뺀다 */
+export function toSpeciesList(rows: SpeciesResponse[]): Species[] {
+  return [...rows]
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .flatMap((row) => {
+      const id = SPECIES_CODE[row.code];
+      if (!id) return [];
+      return [
+        {
+          id,
+          serverId: row.id,
+          group: row.category === "SNAKE" ? ("snake" as const) : ("lizard" as const),
+          commonName: row.commonName,
+          lifeStages: LIFE_STAGES,
+          ...SPECIES_INFO[id],
+        },
+      ];
+    });
+}
+
+/** GET /species/{speciesId}/morphs 한 줄 (공개 API) */
+export const morphSchema = z.object({
+  id: z.number().int(),
   code: z.string(),
   name: z.string(),
-  /** 부화 후 이 일수부터 이 단계 [미확정] 10/10 공동 기획에서 확정 */
-  minAgeDays: z.number().int().min(0),
-  criteria: z.string(),
+  displayOrder: z.number().int().optional(),
 });
-export type LifeStage = z.infer<typeof lifeStageSchema>;
-
-export const speciesSchema = z.object({
-  id: speciesIdSchema,
-  group: z.enum(SPECIES_GROUPS),
-  commonName: z.string(),
-  officialName: z.string(),
-  scientificName: z.string(),
-  aliases: z.array(z.string()),
-  lifeStages: z.array(lifeStageSchema).min(1),
-  /** 모프 목록은 예시 (Figma P02 3/4) */
-  morphs: z.array(z.string()),
-  defaultFoodName: z.string(),
-});
-export type Species = z.infer<typeof speciesSchema>;
+export type Morph = z.infer<typeof morphSchema>;
 
 export const careLabelSchema = z.enum(["recommended", "reference"]);
 export type CareLabel = z.infer<typeof careLabelSchema>;

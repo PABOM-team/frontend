@@ -10,11 +10,15 @@ let refreshing: Promise<string | null> | undefined;
 /** 앱을 연 뒤 첫 요청들이 함께 기다리는 refresh 한 번 */
 let bootstrap: Promise<unknown> | undefined;
 
+/** 로그인 없이 부르는 공개 API(종·모프 조회). access 토큰을 싣지 않는다 */
+const isPublicPath = (url: string) => /\/species(\/[^/]+\/morphs)?$/.test(new URL(url).pathname);
+
 /**
- * 로그인 전에 부르는 API(인증)와 가입 토큰을 직접 싣는 약관 동의.
+ * 로그인 전에 부르는 API(인증·공개 API)와 가입 토큰을 직접 싣는 약관 동의.
  * 앱 시작 refresh를 기다리지 않고, 401이어도 refresh로 다시 시도하지 않는다
  */
-const isAuthPath = (url: string) => /\/(auth\/|me\/agreements$)/.test(new URL(url).pathname);
+const isAuthPath = (url: string) =>
+  /\/(auth\/|me\/agreements$)/.test(new URL(url).pathname) || isPublicPath(url);
 
 /** refresh 쿠키로 access 토큰을 다시 받는다 (API-02). 동시에 여러 번 불려도 요청은 한 번만 */
 export function refreshAccessToken() {
@@ -51,7 +55,7 @@ export const api = ky.create({
         }
         // 약관 동의처럼 가입 토큰을 직접 실어 보낸 요청은 그대로 둔다
         const token = getAccessToken();
-        if (token && !request.headers.has("Authorization")) {
+        if (token && !request.headers.has("Authorization") && !isPublicPath(request.url)) {
           request.headers.set("Authorization", `Bearer ${token}`);
         }
       },

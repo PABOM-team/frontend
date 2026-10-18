@@ -4,6 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 export const queryKeys = {
   me: ["me"] as const,
   species: ["species"] as const,
+  morphs: (serverId: number) => ["species", serverId, "morphs"] as const,
   careStandards: (speciesId: string) => ["species", speciesId, "care-standards"] as const,
   pets: ["pets"] as const,
   petList: (status: string) => ["pets", "list", status] as const,

@@ -292,11 +292,12 @@ QA는 개발 서버(목업 API)에서 375×812로 직접 눌러 확인했다. �
 | API-04 | GET /me                            | 진입 분기·S01     | 목업                                            |
 | API-05 | POST /me/agreements                | A03               | 개발 서버                                       |
 | API-07 | DELETE /me                         | S02               | 목업                                            |
-| API-10 | GET /species                       | P02·S04           | 목업                                            |
+| API-10 | GET /species                       | P02·S04           | 개발 서버 (`species`, 로그인 없이)              |
+| -      | GET /species/{id}/morphs           | P02·P05           | 개발 서버 (`species`, 로그인 없이)              |
 | API-11 | GET /species/{id}/care-standards   | H04·S04           | 목업                                            |
 | API-20 | GET /pets                          | P01·P08·H01       | 목업                                            |
-| API-21 | POST /pets                         | P02               | 목업                                            |
-| API-22 | GET /pets/{id}                     | P04               | 목업                                            |
+| API-21 | POST /pets                         | P02               | 목업 (백엔드 모양. 등록만, 일정 생성 안 함)     |
+| API-22 | GET /pets/{id}                     | P04               | 목업 (백엔드 모양. 체크 리스트·기록은 목업만)   |
 | API-23 | PATCH /pets/{id}                   | P05               | 목업                                            |
 | API-24 | DELETE /pets/{id}                  | P05·P08           | 목업                                            |
 | API-26 | POST /pets/{id}/status-changes     | P06·P08           | 목업                                            |

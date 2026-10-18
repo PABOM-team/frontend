@@ -6,7 +6,10 @@ import {
   type HandoverScope,
 } from "@/shared/domain/handover";
 import {
+  petResponseSchema,
   petSchema,
+  toPet,
+  type Pet,
   type PetCreateInput,
   type PetStatus,
   type PetStatusChangeInput,
@@ -15,14 +18,23 @@ import {
 import {
   careRecordSchema,
   photoSchema,
+  type CareRecord,
   recordPageSchema,
   type CompleteInput,
   type RecordCreateInput,
   type RecordQuery,
   type RecordUpdateInput,
 } from "@/shared/domain/record";
-import { routineSchema, type RoutineUpdateInput } from "@/shared/domain/routine";
-import { careStandardTableSchema, speciesSchema, type SpeciesId } from "@/shared/domain/species";
+import { routineSchema, type Routine, type RoutineUpdateInput } from "@/shared/domain/routine";
+import { successEnvelope } from "@/shared/domain/envelope";
+import {
+  careStandardTableSchema,
+  morphSchema,
+  speciesResponseSchema,
+  toSpeciesList,
+  type Species,
+  type SpeciesId,
+} from "@/shared/domain/species";
 import { todaySchema } from "@/shared/domain/today";
 import {
   AGREEMENT_VERSION,
@@ -87,28 +99,61 @@ export const meApi = {
 };
 
 export const speciesApi = {
-  /** API-10 */
-  list: () => api.get("species").json(z.array(speciesSchema)),
-  /** API-11 */
+  /** API-10 종 목록. 로그인 없이 부른다. MVP 밖의 종(볼파이톤)은 뺀다 */
+  list: () =>
+    api
+      .get("species")
+      .json(successEnvelope(z.array(speciesResponseSchema)))
+      .then(toSpeciesList),
+  /** 종별 모프 목록. 로그인 없이 부른다. speciesId는 백엔드 종 ID(Species.serverId) */
+  morphs: (serverId: number) =>
+    api
+      .get(`species/${serverId}/morphs`)
+      .json(successEnvelope(z.array(morphSchema)))
+      .then((morphs) => [...morphs].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))),
+  /** API-11 (백엔드 미구현이라 목업) */
   careStandards: (speciesId: SpeciesId) =>
     api.get(`species/${speciesId}/care-standards`).json(careStandardTableSchema),
 };
 
-export const petDetailSchema = z.object({
-  pet: petSchema,
-  routines: z.array(routineSchema),
-  recentRecords: z.array(careRecordSchema),
-});
-export type PetDetail = z.infer<typeof petDetailSchema>;
+/** 개체 응답의 백엔드 종 ID를 앱 종으로 바꿀 때 쓰는 종 목록. 한 번만 불러 둔다 */
+let speciesCache: Promise<Species[]> | undefined;
+const speciesForPets = () => {
+  speciesCache ??= speciesApi.list().catch((error: unknown) => {
+    speciesCache = undefined;
+    throw error;
+  });
+  return speciesCache;
+};
+
+/**
+ * 개체 상세. 지금 백엔드는 개체 정보만 주고 체크 리스트·최근 기록은 없다 (없으면 빈 목록).
+ * TODO 체크리스트 구현 후 백엔드 스펙에 맞춘다
+ */
+const petDetailResponseSchema = successEnvelope(
+  petResponseSchema.extend({
+    routines: z.array(routineSchema).default([]),
+    recentRecords: z.array(careRecordSchema).default([]),
+  }),
+);
+export type PetDetail = { pet: Pet; routines: Routine[]; recentRecords: CareRecord[] };
 
 export const petsApi = {
-  /** API-20 */
+  /** API-20 (아직 목업 모양) */
   list: (status: PetStatus = "active") =>
     api.get("pets", { searchParams: { status } }).json(z.array(petSchema)),
-  /** API-21 개체 등록 + 기본 관리 일정 생성 */
-  create: (input: PetCreateInput) => api.post("pets", { json: input }).json(petSchema),
-  /** API-22 개체 상세(요약·일정·최근 기록) */
-  get: (petId: string) => api.get(`pets/${petId}`).json(petDetailSchema),
+  /** API-21 개체 등록만 한다 (기본 관리 일정은 만들지 않는다) */
+  create: async (input: PetCreateInput): Promise<Pet> => {
+    const res = await api.post("pets", { json: input }).json(successEnvelope(petResponseSchema));
+    return toPet(res, await speciesForPets());
+  },
+  /** API-22 개체 상세 */
+  get: async (petId: string): Promise<PetDetail> => {
+    const { routines, recentRecords, ...res } = await api
+      .get(`pets/${petId}`)
+      .json(petDetailResponseSchema);
+    return { pet: toPet(res, await speciesForPets()), routines, recentRecords };
+  },
   /** API-23 */
   update: (petId: string, input: PetUpdateInput) =>
     api.patch(`pets/${petId}`, { json: input }).json(petSchema),

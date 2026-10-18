@@ -75,21 +75,28 @@ export function RoutinesScreen() {
               </Link>
             </div>
 
-            <p className="mt-3.5 text-[13px] leading-relaxed text-[#555]">
-              {SPECIES_LABEL[pet.speciesId]}·{stage}에 맞춘 체크 리스트예요.{" "}
-              {offCount ? `${offCount}개 항목이 꺼져 있어요.` : "모두 켜져 있어요."} 필요 없는
-              항목만 꺼 주세요.
-            </p>
+            {routines.data.length ? (
+              <>
+                <p className="mt-3.5 text-[13px] leading-relaxed text-[#555]">
+                  {SPECIES_LABEL[pet.speciesId]}·{stage}에 맞춘 체크 리스트예요.{" "}
+                  {offCount ? `${offCount}개 항목이 꺼져 있어요.` : "모두 켜져 있어요."} 필요 없는
+                  항목만 꺼 주세요.
+                </p>
 
-            <ul className="mt-2">
-              {routines.data.map((routine) => (
-                <RoutineRow
-                  key={routine.id}
-                  routine={routine}
-                  onEdit={() => setEditId(routine.id)}
-                />
-              ))}
-            </ul>
+                <ul className="mt-2">
+                  {routines.data.map((routine) => (
+                    <RoutineRow
+                      key={routine.id}
+                      routine={routine}
+                      onEdit={() => setEditId(routine.id)}
+                    />
+                  ))}
+                </ul>
+              </>
+            ) : (
+              // 개체 등록은 일정을 만들지 않는다. TODO 체크리스트 API가 생기면 문구를 정한다
+              <StateMessage compact title="아직 체크 리스트가 없어요" />
+            )}
 
             <p className="mt-4 text-[12px] leading-relaxed text-[#888]">
               <Link
