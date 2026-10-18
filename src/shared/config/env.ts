@@ -15,10 +15,16 @@ export const env = {
    */
   apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
   apiMocking: process.env.NEXT_PUBLIC_API_MOCKING === "enabled",
-  /** 목업 모드에서도 진짜 백엔드로 보내는 API 묶음. auth(로그인·약관 동의), species(종·모프 조회) */
+  /** 목업 모드에서도 진짜 백엔드로 보내는 API 묶음. auth(로그인·약관 동의), species(종·모프 조회), pets(개체 등록·상세) */
   apiLive: list(process.env.NEXT_PUBLIC_API_LIVE),
   vapidPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
 } as const;
 
 /** 로그인을 목업으로 하는지 (목업 모드이면서 auth를 진짜로 보내지 않을 때) */
 export const isAuthMocked = env.apiMocking && !env.apiLive.has("auth");
+
+/**
+ * 개체 등록·상세만 진짜 백엔드로 보내는지 (목업 모드이면서 pets를 진짜로 보낼 때).
+ * 이때 사진 업로드·체크 리스트는 아직 목업이라, 등록 화면은 사진을 빼고 등록 뒤 개체 상세로 간다
+ */
+export const isPetsOnlyLive = env.apiMocking && env.apiLive.has("pets");

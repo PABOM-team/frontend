@@ -9,6 +9,7 @@ import { speciesQueries } from "@/entities/species";
 import { petsApi } from "@/shared/api/endpoints";
 import { getErrorMessage, getFieldErrors } from "@/shared/api/errors";
 import { invalidateCareData } from "@/shared/api/query-keys";
+import { isPetsOnlyLive } from "@/shared/config/env";
 import {
   lifeStageIdOf,
   SEX_LABEL,
@@ -132,7 +133,8 @@ export function RegisterPetFlow({ onboarding }: { onboarding: boolean }) {
     mutationFn: () => petsApi.create(toCreateInput(draft, species!, morphs ?? [], clientRequestId)),
     onSuccess: async (pet) => {
       await invalidateCareData(queryClient);
-      router.replace(`/pets/${pet.id}/routines?from=register`);
+      // 개체만 진짜 백엔드로 보낼 때는 체크 리스트(목업)가 이 개체를 몰라서 상세로 간다
+      router.replace(isPetsOnlyLive ? `/pets/${pet.id}` : `/pets/${pet.id}/routines?from=register`);
     },
     onError: (error) => {
       const fields = getFieldErrors(error);
@@ -263,11 +265,14 @@ export function RegisterPetFlow({ onboarding }: { onboarding: boolean }) {
 
         {step === 4 ? (
           <div className="space-y-5">
-            <PetPhotoPicker
-              value={draft.photo}
-              onChange={(photo) => patch({ photo })}
-              onBusyChange={setUploading}
-            />
+            {/* 개체만 진짜로 보낼 때는 사진 업로드가 목업이라 백엔드가 그 파일 ID를 모른다 */}
+            {!isPetsOnlyLive ? (
+              <PetPhotoPicker
+                value={draft.photo}
+                onChange={(photo) => patch({ photo })}
+                onBusyChange={setUploading}
+              />
+            ) : null}
             <Field label="이름" htmlFor="pet-name" error={nameError}>
               <Input
                 id="pet-name"
@@ -352,6 +357,8 @@ export function RegisterPetFlow({ onboarding }: { onboarding: boolean }) {
           <Button size="xl" disabled={!canSubmit} onClick={() => create.mutate()}>
             {create.isPending || uploading ? (
               <LoaderCircle className="size-5 animate-spin" aria-label="저장 중" />
+            ) : isPetsOnlyLive ? (
+              "등록하기"
             ) : (
               "등록하고 체크 리스트 보기"
             )}

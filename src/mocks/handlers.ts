@@ -342,53 +342,8 @@ export const speciesHandlers = [
   }),
 ];
 
-/** 백엔드에 아직 없는 API. 로그인이 진짜여도 목업이 답한다 */
-export const appHandlers = [
-  // ── 내 정보 ─────────────────────────────────────────────
-  http.get(
-    url("/me"),
-    authed(({ user }) => HttpResponse.json(meOf(user))),
-  ),
-
-  http.delete(
-    url("/me"),
-    authed(({ user }) => {
-      const petIds = new Set(db.pets.filter((p) => p.userId === user.id).map((p) => p.id));
-      db.records = db.records.filter((r) => !petIds.has(r.petId));
-      db.routines = db.routines.filter((r) => !petIds.has(r.petId));
-      db.pets = db.pets.filter((p) => !petIds.has(p.id));
-      db.cards = db.cards.filter((c) => c.userId !== user.id);
-      db.files = db.files.filter((f) => f.ownerId !== user.id);
-      db.users = db.users.filter((u) => u.id !== user.id);
-      db.session = { userId: null, token: null };
-      return new HttpResponse(null, { status: 204 });
-    }),
-  ),
-
-  // ── 관리 기준 ──────────────────────────────────────────
-  http.get(url("/species/:speciesId/care-standards"), async ({ params }) => {
-    await wait();
-    const speciesId = params.speciesId as SpeciesId;
-    if (!SPECIES_DATA.some((s) => s.id === speciesId)) return notFound();
-    return HttpResponse.json(careStandardTable(speciesId));
-  }),
-
-  // ── 개체 ───────────────────────────────────────────────
-  http.get(
-    url("/pets"),
-    authed(({ request, user }) => {
-      const status = new URL(request.url).searchParams.get("status") ?? "active";
-      const pets = db.pets
-        .filter((p) => p.userId === user.id && !p.deletedAt && p.status === status)
-        .sort((a, b) =>
-          status === "ended"
-            ? (b.endedOn ?? "").localeCompare(a.endedOn ?? "")
-            : a.createdAt.localeCompare(b.createdAt),
-        );
-      return HttpResponse.json(pets.map(serializePet));
-    }),
-  ),
-
+/** 개체 등록·상세 (백엔드 모양). NEXT_PUBLIC_API_LIVE에 pets가 있으면 진짜로 보낸다 */
+export const petHandlers = [
   http.post(
     url("/pets"),
     authed(async ({ request, user }) => {
@@ -439,6 +394,54 @@ export const appHandlers = [
       // 남의 개체도 '찾을 수 없음'으로 보여 존재 여부를 숨긴다
       if (!pet) return notFound();
       return success(petDetail(pet.id));
+    }),
+  ),
+];
+
+/** 백엔드에 아직 없는 API. 로그인이 진짜여도 목업이 답한다 */
+export const appHandlers = [
+  // ── 내 정보 ─────────────────────────────────────────────
+  http.get(
+    url("/me"),
+    authed(({ user }) => HttpResponse.json(meOf(user))),
+  ),
+
+  http.delete(
+    url("/me"),
+    authed(({ user }) => {
+      const petIds = new Set(db.pets.filter((p) => p.userId === user.id).map((p) => p.id));
+      db.records = db.records.filter((r) => !petIds.has(r.petId));
+      db.routines = db.routines.filter((r) => !petIds.has(r.petId));
+      db.pets = db.pets.filter((p) => !petIds.has(p.id));
+      db.cards = db.cards.filter((c) => c.userId !== user.id);
+      db.files = db.files.filter((f) => f.ownerId !== user.id);
+      db.users = db.users.filter((u) => u.id !== user.id);
+      db.session = { userId: null, token: null };
+      return new HttpResponse(null, { status: 204 });
+    }),
+  ),
+
+  // ── 관리 기준 ──────────────────────────────────────────
+  http.get(url("/species/:speciesId/care-standards"), async ({ params }) => {
+    await wait();
+    const speciesId = params.speciesId as SpeciesId;
+    if (!SPECIES_DATA.some((s) => s.id === speciesId)) return notFound();
+    return HttpResponse.json(careStandardTable(speciesId));
+  }),
+
+  // ── 개체 ───────────────────────────────────────────────
+  http.get(
+    url("/pets"),
+    authed(({ request, user }) => {
+      const status = new URL(request.url).searchParams.get("status") ?? "active";
+      const pets = db.pets
+        .filter((p) => p.userId === user.id && !p.deletedAt && p.status === status)
+        .sort((a, b) =>
+          status === "ended"
+            ? (b.endedOn ?? "").localeCompare(a.endedOn ?? "")
+            : a.createdAt.localeCompare(b.createdAt),
+        );
+      return HttpResponse.json(pets.map(serializePet));
     }),
   ),
 
@@ -939,4 +942,4 @@ export const appHandlers = [
   http.get(url("/health"), () => HttpResponse.json({ status: "ok" })),
 ];
 
-export const handlers = [...authHandlers, ...speciesHandlers, ...appHandlers];
+export const handlers = [...authHandlers, ...speciesHandlers, ...petHandlers, ...appHandlers];
