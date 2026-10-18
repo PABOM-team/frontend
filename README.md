@@ -68,7 +68,7 @@ state 쿠키는 localhost 쪽에 있어서 맞지 않는다).
 | `pnpm dev:https`    | 로컬 HTTPS. 웹 푸시 테스트용                            |
 | `pnpm build`        | `next build` 후 `serwist build`로 `public/sw.js` 생성   |
 | `pnpm typecheck`    | 라우트 타입 생성 + `tsc`                                |
-| `pnpm lint`         | ESLint                                                  |
+| `pnpm lint`         | oxlint (`.oxlintrc.json`)                               |
 | `pnpm format`       | Prettier (Tailwind 클래스 정렬 포함)                    |
 | `pnpm test`         | Vitest (watch). CI에서는 `pnpm test:run`                |
 | `pnpm test:e2e`     | Playwright (모바일 Chrome / Safari 뷰포트)              |
