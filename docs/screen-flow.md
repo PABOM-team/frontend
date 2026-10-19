@@ -289,9 +289,9 @@ QA는 개발 서버(목업 API)에서 375×812로 직접 눌러 확인했다. �
 | API-01 | GET /auth/{provider}/callback      | A02               | 개발 서버                                            |
 | API-02 | POST /auth/refresh                 | 모든 화면(401 때) | 개발 서버                                            |
 | API-03 | POST /auth/logout                  | S01               | 개발 서버                                            |
-| API-04 | GET /me                            | 진입 분기·S01     | 목업                                                 |
+| API-04 | GET /users/me                      | 진입 분기·S01     | 개발 서버 (`user`)                                   |
 | API-05 | POST /me/agreements                | A03               | 개발 서버                                            |
-| API-07 | DELETE /me                         | S02               | 목업                                                 |
+| API-07 | DELETE /users/me                   | S02               | 개발 서버 (`user`). 소셜 연결 해제는 MVP 제외        |
 | API-10 | GET /species                       | P02·S04           | 개발 서버 (`species`, 로그인 없이)                   |
 | -      | GET /species/{id}/morphs           | P02·P05           | 개발 서버 (`species`, 로그인 없이)                   |
 | API-11 | GET /species/{id}/care-standards   | H04·S04           | 목업                                                 |

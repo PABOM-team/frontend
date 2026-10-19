@@ -1,7 +1,7 @@
 import { FetchInterceptor } from "@mswjs/interceptors/fetch";
 import { defineNetwork, InterceptorSource } from "msw/experimental";
 import { env } from "@/shared/config/env";
-import { appHandlers, authHandlers, petHandlers, speciesHandlers } from "./handlers";
+import { appHandlers, authHandlers, petHandlers, speciesHandlers, userHandlers } from "./handlers";
 
 /**
  * 브라우저 목업. 서비스 워커 대신 페이지의 fetch를 직접 가로챈다.
@@ -9,7 +9,8 @@ import { appHandlers, authHandlers, petHandlers, speciesHandlers } from "./handl
  * 요청이 목업을 거치지 않고 진짜 서버로 새는 문제가 있었다.
  *
  * NEXT_PUBLIC_API_LIVE에 auth가 있으면 로그인·약관 동의를, species가 있으면 종·모프 조회를,
- * pets가 있으면 개체 목록·등록·상세·수정을 가로채지 않고 진짜 백엔드로 보낸다.
+ * pets가 있으면 개체 목록·등록·상세·수정을, user가 있으면 내 정보·회원 탈퇴를
+ * 가로채지 않고 진짜 백엔드로 보낸다.
  */
 export const network = defineNetwork({
   sources: [new InterceptorSource({ interceptors: [new FetchInterceptor()] })],
@@ -17,6 +18,7 @@ export const network = defineNetwork({
     ...(env.apiLive.has("auth") ? [] : authHandlers),
     ...(env.apiLive.has("species") ? [] : speciesHandlers),
     ...(env.apiLive.has("pets") ? [] : petHandlers),
+    ...(env.apiLive.has("user") ? [] : userHandlers),
     ...appHandlers,
   ],
   onUnhandledFrame: "bypass",

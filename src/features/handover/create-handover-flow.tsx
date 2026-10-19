@@ -126,7 +126,7 @@ export function CreateHandoverFlow({ detail }: { detail: PetDetail }) {
             <ScopeRow
               title="내 닉네임 보여 주기"
               description={
-                scope.nickname && me
+                scope.nickname && me?.nickname
                   ? `받는 분에게 '${me.nickname}'로 보여요`
                   : "고른 경우에만 보여요"
               }
