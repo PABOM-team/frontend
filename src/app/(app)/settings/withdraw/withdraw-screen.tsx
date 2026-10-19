@@ -37,12 +37,11 @@ export function WithdrawScreen() {
       <ScreenBody>
         <h2 className="text-[18px] font-bold">탈퇴하기 전에 확인해 주세요</h2>
         <p className="mt-2 text-[13px] leading-relaxed text-[#555]">
-          개체·기록·사진이 모두 삭제되고 되돌릴 수 없어요. 카카오·구글 계정 연결도 끊어져요.
+          개체·기록·사진이 모두 삭제되고 되돌릴 수 없어요.
         </p>
         <InfoBox className="mt-3 space-y-0.5 text-[12.5px]">
           <p>· 개체 {pets?.length ?? 0}마리와 기록</p>
           <p>· 사진</p>
-          <p>· 로그인 연결(카카오·구글)</p>
         </InfoBox>
         <label className="mt-6 flex items-center gap-2.5 text-[14px]">
           <Checkbox checked={checked} onCheckedChange={(on) => setChecked(on === true)} />위 내용을
