@@ -133,14 +133,30 @@ const myRecord = (user: DbUser, recordId: string) => {
 };
 
 function meOf(user: DbUser) {
+  const pets = db.pets.filter((p) => p.userId === user.id && !p.deletedAt);
   return {
-    id: user.id,
+    id: accountId(user),
     nickname: user.nickname,
-    provider: user.provider,
-    status: user.status,
-    joinedAt: user.joinedAt,
-    petCount: db.pets.filter((p) => p.userId === user.id && !p.deletedAt && p.status === "active")
-      .length,
+    status: user.status === "active" ? "ACTIVE" : "PENDING_TERMS",
+    role: "USER",
+    region: null,
+    agreements: user.agreements.map((type) => ({
+      type,
+      version: "1.0",
+      agreed: true,
+      agreedAt: user.joinedAt,
+    })),
+    requiredAgreements: ["TERMS", "PRIVACY", "AGE_14"].map((type) => ({
+      type,
+      currentVersion: "1.0",
+      required: true,
+    })),
+    needsReconsent: false,
+    petCount: {
+      active: pets.filter((p) => p.status === "active").length,
+      ended: pets.filter((p) => p.status === "ended").length,
+    },
+    createdAt: user.joinedAt,
   };
 }
 
@@ -301,17 +317,23 @@ export const authHandlers = [
   }),
 ];
 
-/** 백엔드에 아직 없는 API. 로그인이 진짜여도 목업이 답한다 */
-export const appHandlers = [
-  // ── 내 정보 ─────────────────────────────────────────────
+/**
+ * 내 정보·회원 탈퇴 (백엔드에 이미 있는 API와 같은 모양).
+ * NEXT_PUBLIC_API_LIVE에 user를 넣으면 이 묶음은 빼고 진짜 백엔드로 보낸다 (browser.ts)
+ */
+export const userHandlers = [
   http.get(
-    url("/me"),
-    authed(({ user }) => HttpResponse.json(meOf(user))),
+    url("/users/me"),
+    authed(({ user }) => success(meOf(user))),
   ),
 
   http.delete(
-    url("/me"),
-    authed(({ user }) => {
+    url("/users/me"),
+    authed(async ({ request, user }) => {
+      const body = (await request.json().catch(() => null)) as { confirm?: boolean } | null;
+      if (body?.confirm !== true) {
+        return fail(422, "CONFIRM_REQUIRED", "회원 탈퇴 확인이 필요합니다.");
+      }
       const petIds = new Set(db.pets.filter((p) => p.userId === user.id).map((p) => p.id));
       db.records = db.records.filter((r) => !petIds.has(r.petId));
       db.routines = db.routines.filter((r) => !petIds.has(r.petId));
@@ -323,7 +345,10 @@ export const appHandlers = [
       return new HttpResponse(null, { status: 204 });
     }),
   ),
+];
 
+/** 백엔드에 아직 없는 API. 로그인이 진짜여도 목업이 답한다 */
+export const appHandlers = [
   // ── 종·관리 기준 ────────────────────────────────────────
   http.get(url("/species"), async () => {
     await wait();
@@ -894,4 +919,4 @@ export const appHandlers = [
   http.get(url("/health"), () => HttpResponse.json({ status: "ok" })),
 ];
 
-export const handlers = [...authHandlers, ...appHandlers];
+export const handlers = [...authHandlers, ...userHandlers, ...appHandlers];

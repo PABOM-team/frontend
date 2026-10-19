@@ -53,7 +53,19 @@ describe("목업 API", () => {
     const payload = btoa(JSON.stringify({ sub: "42", tokenType: "ACCESS" }));
     setStoredAccount({ id: 42, nickname: "파봄", provider: "google" });
     setAccessToken(`eyJhbGciOiJIUzI1NiJ9.${payload}.signature`);
-    expect(await meApi.get()).toMatchObject({ id: "live-42", nickname: "파봄", petCount: 0 });
+    expect(await meApi.get()).toMatchObject({
+      id: 42,
+      nickname: "파봄",
+      status: "ACTIVE",
+      petCount: { active: 0, ended: 0 },
+    });
+  });
+
+  it("회원 탈퇴는 확인(confirm)을 보내야 하고, 탈퇴하면 내 정보를 못 불러온다", async () => {
+    await login("kakao");
+    expect(await meApi.get()).toMatchObject({ status: "ACTIVE", petCount: { active: 2 } });
+    await meApi.withdraw();
+    await expect(meApi.get()).rejects.toMatchObject({ response: { status: 401 } });
   });
 
   it("오늘 할 일은 지난 할 일을 먼저 보여 주고, 체크하면 완료로 바뀐다", async () => {

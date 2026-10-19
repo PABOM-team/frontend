@@ -1,18 +1,23 @@
 import { FetchInterceptor } from "@mswjs/interceptors/fetch";
 import { defineNetwork, InterceptorSource } from "msw/experimental";
 import { env } from "@/shared/config/env";
-import { appHandlers, authHandlers } from "./handlers";
+import { appHandlers, authHandlers, userHandlers } from "./handlers";
 
 /**
  * 브라우저 목업. 서비스 워커 대신 페이지의 fetch를 직접 가로챈다.
  * 서비스 워커 방식은 탭이 백그라운드에 오래 있으면 브라우저가 워커를 멈춰서,
  * 요청이 목업을 거치지 않고 진짜 서버로 새는 문제가 있었다.
  *
- * NEXT_PUBLIC_API_LIVE=auth이면 로그인·약관 동의는 가로채지 않고 진짜 백엔드로 보낸다.
+ * NEXT_PUBLIC_API_LIVE에 적은 묶음은 가로채지 않고 진짜 백엔드로 보낸다.
+ * auth = 로그인·약관 동의, user = 내 정보·회원 탈퇴
  */
 export const network = defineNetwork({
   sources: [new InterceptorSource({ interceptors: [new FetchInterceptor()] })],
-  handlers: env.apiLive.has("auth") ? appHandlers : [...authHandlers, ...appHandlers],
+  handlers: [
+    ...(env.apiLive.has("auth") ? [] : authHandlers),
+    ...(env.apiLive.has("user") ? [] : userHandlers),
+    ...appHandlers,
+  ],
   onUnhandledFrame: "bypass",
 });
 

@@ -193,7 +193,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { data: me, isError } = useQuery(meQueries.detail());
-  const needsAgreement = me?.status === "pending_agreement" && pathname !== "/agreements";
+  const needsAgreement = me?.status === "PENDING_TERMS" && pathname !== "/agreements";
 
   useEffect(() => {
     if (isError) router.replace(`/welcome?next=${encodeURIComponent(pathname)}`);

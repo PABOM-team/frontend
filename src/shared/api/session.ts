@@ -80,7 +80,7 @@ export function clearSignupSession() {
 }
 
 /**
- * 로그인할 때 받은 회원 정보. 백엔드에 GET /me가 생기기 전까지
+ * 로그인할 때 받은 회원 정보. 내 정보(GET /users/me)에 없는 소셜 종류를 설정 화면에 보여 주고,
  * 목업 API가 진짜 회원의 닉네임을 보여 줄 때 쓴다.
  */
 export type StoredAccount = { id: number; nickname?: string; provider: AuthProvider };

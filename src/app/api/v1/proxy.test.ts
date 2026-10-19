@@ -11,8 +11,8 @@ describe("로컬 개발 전용 프록시", () => {
       ctx,
     );
     expect(response.status).toBe(404);
-    const get = await proxyGet(new Request("https://pabom.app/api/v1/me"), {
-      params: Promise.resolve({ path: ["me"] }),
+    const get = await proxyGet(new Request("https://pabom.app/api/v1/users/me"), {
+      params: Promise.resolve({ path: ["users", "me"] }),
     });
     expect(get.status).toBe(404);
   });

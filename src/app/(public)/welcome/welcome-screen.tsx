@@ -15,7 +15,7 @@ export function WelcomeScreen() {
   const { data: me } = useQuery({ ...meQueries.detail(), retry: false });
 
   useEffect(() => {
-    if (me) router.replace(me.status === "pending_agreement" ? "/agreements" : (next ?? "/home"));
+    if (me) router.replace(me.status === "PENDING_TERMS" ? "/agreements" : (next ?? "/home"));
   }, [me, next, router]);
 
   return (

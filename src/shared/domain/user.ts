@@ -8,23 +8,45 @@ export const AUTH_PROVIDER_LABEL: Record<AuthProvider, string> = {
   google: "구글",
 };
 
-export const meSchema = z.object({
-  id: z.string(),
-  /** 카카오 닉네임·구글 이름. 비어 오면 서버가 '파봄 사용자0000'을 넣는다 */
-  nickname: z.string(),
-  provider: authProviderSchema,
-  /** pending_agreement면 약관 동의 전이라 다른 화면으로 못 간다 */
-  status: z.enum(["pending_agreement", "active"]),
-  joinedAt: z.iso.datetime(),
-  petCount: z.number().int().min(0),
-});
-export type Me = z.infer<typeof meSchema>;
+/** 회원 상태. PENDING_TERMS는 약관 동의 전이라 가입 토큰만 있고 다른 화면으로 못 간다 */
+export const accountStatusSchema = z.enum(["PENDING_TERMS", "ACTIVE", "WITHDRAWN"]);
+
+const agreementTypeSchema = z.enum(["TERMS", "PRIVACY", "AGE_14", "MARKETING"]);
+
+/**
+ * API-04 GET /users/me 내 정보. 로그인한 소셜 종류(provider)는 오지 않아서
+ * 로그인할 때 저장해 둔 값(getStoredAccount)을 쓴다
+ */
+export const meSchema = successEnvelope(
+  z.object({
+    id: z.number(),
+    nickname: z.string().nullable(),
+    status: accountStatusSchema,
+    role: z.enum(["USER", "ADMIN"]),
+    agreements: z.array(
+      z.object({
+        type: agreementTypeSchema,
+        version: z.string(),
+        agreed: z.boolean(),
+        agreedAt: z.iso.datetime({ offset: true }).nullish(),
+      }),
+    ),
+    requiredAgreements: z.array(
+      z.object({ type: agreementTypeSchema, currentVersion: z.string(), required: z.boolean() }),
+    ),
+    /** 필수 약관 버전이 올라가 다시 동의해야 하는지 */
+    needsReconsent: z.boolean(),
+    petCount: z.object({ active: z.number().int().min(0), ended: z.number().int().min(0) }),
+    createdAt: z.iso.datetime({ offset: true }),
+  }),
+);
+export type Me = z.output<typeof meSchema>;
 
 /** 백엔드 회원. PENDING_TERMS는 약관 동의 전이라 가입 토큰만 있다 */
 export const accountSchema = z.object({
   id: z.number(),
   nickname: z.string().optional(),
-  status: z.enum(["PENDING_TERMS", "ACTIVE", "WITHDRAWN"]),
+  status: accountStatusSchema,
 });
 export type Account = z.infer<typeof accountSchema>;
 

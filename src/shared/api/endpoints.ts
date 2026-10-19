@@ -65,8 +65,8 @@ export const authApi = {
 };
 
 export const meApi = {
-  /** API-04 (백엔드 미구현이라 목업) */
-  get: () => api.get("me").json(meSchema),
+  /** API-04 */
+  get: () => api.get("users/me").json(meSchema),
   /** API-05 약관 동의 → 가입 완료. 가입 토큰으로 부르고 access 토큰을 받는다 */
   agree: (agreed: AgreementType[], signupToken: string) =>
     api
@@ -82,8 +82,8 @@ export const meApi = {
         retry: 0,
       })
       .json(agreementCompletionSchema),
-  /** API-07 회원 탈퇴 */
-  withdraw: () => api.delete("me").then(noContent),
+  /** API-07 회원 탈퇴. 파봄 회원 정보만 지우고 카카오·구글 연결은 끊지 않는다 (MVP) */
+  withdraw: () => api.delete("users/me", { json: { confirm: true } }).then(noContent),
 };
 
 export const speciesApi = {
