@@ -4,8 +4,9 @@ import type { Pet } from "@/shared/domain/pet";
 import type { CareRecord } from "@/shared/domain/record";
 import { getOccurrences, type Routine } from "@/shared/domain/routine";
 import { lifeStageFromHatch, SPECIES_LABEL } from "@/shared/domain/species";
+import { SPECIES_PROFILE } from "@/shared/domain/species-catalog";
 import type { Task, Today } from "@/shared/domain/today";
-import { CARE_STANDARD_VERSION, SPECIES_DATA } from "./data";
+import { CARE_STANDARD_VERSION } from "./data";
 import { db, ymd, type DbPet, type DbRecord, type DbRoutine } from "./db";
 
 /**
@@ -17,7 +18,7 @@ const dateOf = (iso: string) => format(parseISO(iso), "yyyy-MM-dd");
 const day = (ymdString: string) => parseISO(`${ymdString}T00:00:00`);
 
 export function speciesOf(pet: Pick<DbPet, "speciesId">) {
-  return SPECIES_DATA.find((s) => s.id === pet.speciesId)!;
+  return SPECIES_PROFILE[pet.speciesId];
 }
 
 export function stageCodeOf(pet: DbPet, today = new Date()) {
@@ -30,7 +31,13 @@ export function stageNameOf(pet: DbPet) {
   return speciesOf(pet).lifeStages.find((s) => s.code === code)?.name ?? code;
 }
 
-const liveRecords = () => db.records.filter((r) => !r.deletedAt);
+export const liveRecords = () => db.records.filter((r) => !r.deletedAt);
+
+/** 백엔드 revisionNo처럼 1부터, 정정할 때마다 1씩 */
+export const revisionNoOf = (record: DbRecord) => record.revisions.length + 1;
+
+export const fileUrlOf = (fileId: string | null) =>
+  db.files.find((f) => f.id === fileId)?.url ?? null;
 
 function lastRecordDate(routineId: string) {
   const dates = liveRecords()
@@ -97,7 +104,8 @@ export function serializeRecord(record: DbRecord): CareRecord {
       .map((id) => db.files.find((f) => f.id === id))
       .filter((f) => f !== undefined)
       .map((f) => ({ id: f.id, url: f.url })),
-    revisions: record.revisions,
+    revisions: record.revisions.map((r) => ({ at: r.at, summary: r.changedFields.join(", ") })),
+    revisionNo: revisionNoOf(record),
   };
 }
 
@@ -115,7 +123,7 @@ export function serializePet(pet: DbPet): Pet {
     lifeStageSource: pet.manualStageCode ? "manual" : "hatch",
     stageUncertain: Boolean(pet.manualStageCode && pet.stageUncertain),
     acquiredOn: pet.acquiredOn,
-    photoUrl: pet.photoUrl,
+    photoUrl: fileUrlOf(pet.photoFileId),
     status: pet.status,
     endReason: pet.endReason,
     endedOn: pet.endedOn,

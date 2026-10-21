@@ -1,17 +1,55 @@
-import { addDays, differenceInCalendarDays, format, parseISO, subDays } from "date-fns";
+import { addDays, differenceInCalendarDays, parseISO, subDays } from "date-fns";
 import { delay, http, HttpResponse } from "msw";
 import { apiBaseUrl } from "@/shared/api/client";
 import { getStoredAccount } from "@/shared/api/session";
-import { CARE_ITEM_LABEL, INTAKE_LABEL, type CareItem, type Intake } from "@/shared/domain/care";
+import {
+  CARE_ITEM_CODE,
+  type BackendPetCreate,
+  type BackendPetUpdate,
+  type BackendRecordCreate,
+  type BackendRecordUpdate,
+} from "@/shared/domain/backend";
+import { CARE_ITEM_LABEL } from "@/shared/domain/care";
 import type { HandoverAcceptInput, HandoverPreview, HandoverScope } from "@/shared/domain/handover";
-import type { PetCreateInput, PetStatusChangeInput, PetUpdateInput } from "@/shared/domain/pet";
-import type { CompleteInput, RecordCreateInput, RecordUpdateInput } from "@/shared/domain/record";
+import type { PetStatusChangeInput } from "@/shared/domain/pet";
+import type { CompleteInput } from "@/shared/domain/record";
 import type { RoutineUpdateInput } from "@/shared/domain/routine";
-import type { SpeciesId } from "@/shared/domain/species";
+import { SPECIES, type SpeciesId } from "@/shared/domain/species";
 import { authProviderSchema } from "@/shared/domain/user";
-import { careStandardTable, SPECIES_DATA } from "./data";
-import { addRoutines, db, nextId, save, ymd, type DbCard, type DbRecord, type DbUser } from "./db";
-import { buildToday, serializePet, serializeRecord, serializeRoutine, stageCodeOf } from "./logic";
+import { BACKEND_MORPHS, BACKEND_SPECIES, careStandardTable } from "./data";
+import {
+  addRoutines,
+  db,
+  nextId,
+  nextNumericId,
+  save,
+  ymd,
+  type DbCard,
+  type DbPet,
+  type DbRecord,
+  type DbUser,
+} from "./db";
+import {
+  buildToday,
+  revisionNoOf,
+  serializePet,
+  serializeRecord,
+  serializeRoutine,
+  stageCodeOf,
+} from "./logic";
+import {
+  CARE_ITEM_OF,
+  INTAKE_OF,
+  petFieldsOf,
+  recordFields,
+  restorableUntil,
+  speciesIdOf,
+  wirePet,
+  wirePetListItem,
+  wireRecord,
+  wireRecordListItem,
+  wireRevisions,
+} from "./wire";
 
 const url = (path: string) => `${apiBaseUrl}${path}`;
 
@@ -28,8 +66,8 @@ function fail(status: number, code: string, message: string, fields?: Record<str
 }
 
 /** 백엔드 공통 성공 응답 {resultType:"SUCCESS", success:{data}} */
-function success(data: unknown) {
-  return HttpResponse.json({ resultType: "SUCCESS", success: { data }, error: null });
+function success(data: unknown, init?: ResponseInit) {
+  return HttpResponse.json({ resultType: "SUCCESS", success: { data }, error: null }, init);
 }
 
 /** 인계 카드 링크는 프론트 주소로 만든다 */
@@ -165,19 +203,6 @@ function newToken() {
   return db.session.token;
 }
 
-function petDetail(petId: string) {
-  const pet = db.pets.find((p) => p.id === petId)!;
-  return {
-    pet: serializePet(pet),
-    routines: db.routines.filter((r) => r.petId === petId).map(serializeRoutine),
-    recentRecords: db.records
-      .filter((r) => r.petId === petId && !r.deletedAt)
-      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
-      .slice(0, 5)
-      .map(serializeRecord),
-  };
-}
-
 function cardStatus(card: DbCard) {
   if (card.status === "unused" && new Date(card.expiresAt) < new Date()) return "expired" as const;
   return card.status;
@@ -195,17 +220,6 @@ function serializeCard(card: DbCard, origin: string) {
     expiresAt: card.expiresAt,
     url: `${origin}/share/${card.code}`,
   };
-}
-
-function summarize(record: Pick<DbRecord, "occurredAt" | "intake" | "weightG" | "memo">) {
-  return [
-    format(parseISO(record.occurredAt), "M/d HH:mm"),
-    record.intake ? INTAKE_LABEL[record.intake] : null,
-    record.weightG ? `${record.weightG}g` : null,
-    record.memo ? `메모 ${record.memo.length}자` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
 }
 
 /**
@@ -347,69 +361,94 @@ export const userHandlers = [
   ),
 ];
 
-/** 백엔드에 아직 없는 API. 로그인이 진짜여도 목업이 답한다 */
-export const appHandlers = [
-  // ── 종·관리 기준 ────────────────────────────────────────
+/**
+ * 종 목록·모프 (백엔드에 이미 있는 API와 같은 모양).
+ * NEXT_PUBLIC_API_LIVE에 species를 넣으면 이 묶음은 빼고 진짜 백엔드로 보낸다 (browser.ts)
+ */
+export const speciesHandlers = [
   http.get(url("/species"), async () => {
     await wait();
-    return HttpResponse.json(SPECIES_DATA);
+    return success(BACKEND_SPECIES);
   }),
 
-  http.get(url("/species/:speciesId/care-standards"), async ({ params }) => {
+  http.get(url("/species/:speciesId/morphs"), async ({ params }) => {
     await wait();
-    const speciesId = params.speciesId as SpeciesId;
-    if (!SPECIES_DATA.some((s) => s.id === speciesId)) return notFound();
-    return HttpResponse.json(careStandardTable(speciesId));
+    const morphs = BACKEND_MORPHS[Number(params.speciesId)];
+    if (!morphs) return fail(404, "SPECIES_NOT_FOUND", "종을 찾을 수 없습니다.");
+    return success(morphs);
   }),
+];
 
-  // ── 개체 ───────────────────────────────────────────────
+const petNotFound = () => fail(404, "PET_NOT_FOUND", "개체를 찾을 수 없습니다.");
+const recordNotFound = () => fail(404, "RECORD_NOT_FOUND", "기록을 찾을 수 없습니다.");
+
+/** 백엔드 오류 코드 → 상태 코드·메시지 */
+const PET_INPUT_ERRORS: Record<string, [number, string]> = {
+  MORPH_NOT_FOUND: [400, "모프를 찾을 수 없습니다."],
+  STAGE_REQUIRED: [422, "성장 단계 정확성이 확정 또는 추정이면 성장 단계가 필요합니다."],
+};
+
+/**
+ * 개체 등록·조회·수정·삭제 (백엔드에 이미 있는 API와 같은 모양).
+ * NEXT_PUBLIC_API_LIVE에 pet을 넣으면 이 묶음은 빼고 진짜 백엔드로 보낸다 (browser.ts)
+ */
+export const petHandlers = [
   http.get(
     url("/pets"),
-    authed(({ request, user }) => {
-      const status = new URL(request.url).searchParams.get("status") ?? "active";
+    authed(({ user }) => {
       const pets = db.pets
-        .filter((p) => p.userId === user.id && !p.deletedAt && p.status === status)
-        .sort((a, b) =>
-          status === "ended"
-            ? (b.endedOn ?? "").localeCompare(a.endedOn ?? "")
-            : a.createdAt.localeCompare(b.createdAt),
-        );
-      return HttpResponse.json(pets.map(serializePet));
+        .filter((p) => p.userId === user.id && !p.deletedAt)
+        // 백엔드처럼 생성일 내림차순
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return success(pets.map(wirePetListItem));
     }),
   ),
 
   http.post(
     url("/pets"),
     authed(async ({ request, user }) => {
-      const input = (await request.json()) as PetCreateInput;
-      if (!input.name?.trim()) {
-        return fail(422, "VALIDATION", "입력한 값을 확인해 주세요.", {
+      const input = (await request.json()) as BackendPetCreate;
+      if (!input.clientRequestId || !input.name?.trim() || input.name.trim().length > 20) {
+        return fail(400, "VALIDATION_FAILED", "요청값이 누락되었거나 올바르지 않습니다.", {
           name: "이름을 입력해 주세요",
         });
       }
-      const photo = db.files.find((f) => f.id === input.photoFileId);
-      const pet = {
-        id: nextId("p"),
+      const speciesId = speciesIdOf(input.speciesId);
+      if (!speciesId) return fail(404, "SPECIES_NOT_FOUND", "종을 찾을 수 없습니다.");
+      // 생략하거나 null이면 UNKNOWN (스웨거)
+      const fields = petFieldsOf(speciesId, {
+        ...input,
+        stageCertainty: input.stageCertainty ?? "UNKNOWN",
+        lifeStageId: input.lifeStageId ?? null,
+        sex: input.sex ?? "UNKNOWN",
+      });
+      if (typeof fields === "string") {
+        const [status, message] = PET_INPUT_ERRORS[fields]!;
+        return fail(status, fields, message);
+      }
+      const pet: DbPet = {
+        id: nextNumericId(),
         userId: user.id,
         name: input.name.trim(),
-        speciesId: input.speciesId,
-        morph: input.morph,
-        sex: input.sex,
-        hatchedOn: input.hatchedOn,
-        manualStageCode: input.hatchedOn ? null : input.lifeStageCode,
-        stageUncertain: !input.hatchedOn && Boolean(input.stageUncertain),
-        acquiredOn: input.acquiredOn,
-        photoUrl: photo?.url ?? null,
-        status: "active" as const,
+        speciesId,
+        morph: null,
+        sex: "unknown",
+        hatchedOn: null,
+        manualStageCode: null,
+        stageUncertain: false,
+        acquiredOn: null,
+        photoFileId: null,
+        status: "active",
         endReason: null,
         endedOn: null,
         createdAt: new Date().toISOString(),
         deletedAt: null,
+        ...fields,
       };
       db.pets.push(pet);
       // 첫 예정일은 등록 당일 [제안]
       addRoutines(db, pet.id, pet.speciesId, stageCodeOf(pet), new Date());
-      return HttpResponse.json(serializePet(pet), { status: 201 });
+      return success(wirePet(pet), { status: 201 });
     }),
   ),
 
@@ -418,8 +457,8 @@ export const appHandlers = [
     authed(({ params, user }) => {
       const pet = myPet(user, params.petId);
       // 남의 개체도 '찾을 수 없음'으로 보여 존재 여부를 숨긴다
-      if (!pet) return notFound();
-      return HttpResponse.json(petDetail(pet.id));
+      if (!pet) return petNotFound();
+      return success(wirePet(pet));
     }),
   ),
 
@@ -427,27 +466,20 @@ export const appHandlers = [
     url("/pets/:petId"),
     authed(async ({ request, params, user }) => {
       const pet = myPet(user, params.petId);
-      if (!pet) return notFound();
-      const input = (await request.json()) as PetUpdateInput;
+      if (!pet) return petNotFound();
+      const input = (await request.json()) as BackendPetUpdate;
+      if (input.name !== undefined && !input.name.trim()) {
+        return fail(400, "VALIDATION_FAILED", "요청값이 누락되었거나 올바르지 않습니다.", {
+          name: "이름을 입력해 주세요",
+        });
+      }
+      const fields = petFieldsOf(pet.speciesId, input, pet);
+      if (typeof fields === "string") {
+        const [status, message] = PET_INPUT_ERRORS[fields]!;
+        return fail(status, fields, message);
+      }
       const beforeStage = stageCodeOf(pet);
-
-      if (input.name !== undefined) pet.name = input.name.trim();
-      if (input.morph !== undefined) pet.morph = input.morph;
-      if (input.sex !== undefined) pet.sex = input.sex;
-      if (input.acquiredOn !== undefined) pet.acquiredOn = input.acquiredOn;
-      if (input.hatchedOn !== undefined) {
-        pet.hatchedOn = input.hatchedOn;
-        if (input.hatchedOn) pet.manualStageCode = null;
-      }
-      if (input.lifeStageCode !== undefined && !pet.hatchedOn) {
-        pet.manualStageCode = input.lifeStageCode;
-      }
-      if (input.stageUncertain !== undefined) {
-        pet.stageUncertain = !pet.hatchedOn && input.stageUncertain;
-      }
-      if (input.photoFileId !== undefined) {
-        pet.photoUrl = db.files.find((f) => f.id === input.photoFileId)?.url ?? null;
-      }
+      Object.assign(pet, fields);
 
       // 생애 단계가 바뀌면 직접 바꾸지 않은 주기를 새 단계 기준으로 다시 제안
       const afterStage = stageCodeOf(pet);
@@ -462,7 +494,7 @@ export const appHandlers = [
           if (!customized) routine.intervalDays = next.intervalDays;
         }
       }
-      return HttpResponse.json(serializePet(pet));
+      return success(wirePet(pet));
     }),
   ),
 
@@ -470,12 +502,257 @@ export const appHandlers = [
     url("/pets/:petId"),
     authed(({ params, user }) => {
       const pet = myPet(user, params.petId);
-      if (!pet) return notFound();
-      pet.deletedAt = new Date().toISOString();
+      if (!pet) return petNotFound();
+      // 백엔드처럼 개체의 기록도 함께 지운다
+      const now = new Date().toISOString();
+      pet.deletedAt = now;
+      for (const record of db.records.filter((r) => r.petId === pet.id && !r.deletedAt)) {
+        record.deletedAt = now;
+      }
       return new HttpResponse(null, { status: 204 });
     }),
   ),
+];
 
+/**
+ * 기록 목록·추가·상세·정정·삭제·복구 (백엔드에 이미 있는 API와 같은 모양).
+ * NEXT_PUBLIC_API_LIVE에 record를 넣으면 이 묶음은 빼고 진짜 백엔드로 보낸다 (browser.ts)
+ */
+export const recordHandlers = [
+  http.get(
+    url("/records"),
+    authed(({ request, user }) => {
+      const params = new URL(request.url).searchParams;
+      const petId = params.get("petId");
+      if (petId && !myPet(user, petId)) return petNotFound();
+      const itemCodes = params.get("itemCodes")?.split(",").filter(Boolean) ?? [];
+      const recordType = params.get("recordType");
+      const from = params.get("from");
+      const to = params.get("to");
+      const size = Number(params.get("size") ?? 20);
+      if (!Number.isInteger(size) || size < 1 || size > 50) {
+        return fail(400, "VALIDATION_FAILED", "요청값이 누락되었거나 올바르지 않습니다.");
+      }
+      // 목업 커서는 건너뛸 개수
+      const offset = Number(params.get("cursor") ?? 0);
+      const myPetIds = new Set(
+        db.pets.filter((p) => p.userId === user.id && !p.deletedAt).map((p) => p.id),
+      );
+      const rows = db.records
+        .filter((r) => !r.deletedAt && myPetIds.has(r.petId))
+        .filter((r) => !petId || r.petId === petId)
+        .filter((r) => !itemCodes.length || itemCodes.includes(CARE_ITEM_CODE[r.careItem]))
+        .filter((r) => !recordType || (r.type === "done" ? "DONE" : "SKIPPED") === recordType)
+        .filter((r) => !from || ymd(parseISO(r.occurredAt)) >= from)
+        .filter((r) => !to || ymd(parseISO(r.occurredAt)) <= to)
+        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id));
+      const page = rows.slice(offset, offset + size);
+      return success({
+        items: page.map(wireRecordListItem),
+        nextCursor: offset + size < rows.length ? String(offset + size) : null,
+        lastFeeding: null,
+      });
+    }),
+  ),
+
+  http.post(
+    url("/records"),
+    authed(async ({ request, user }) => {
+      const input = (await request.json()) as BackendRecordCreate;
+      if (!input.clientRequestId || !input.occurredAt) {
+        return fail(400, "VALIDATION_FAILED", "요청값이 누락되었거나 올바르지 않습니다.");
+      }
+      const pet = myPet(user, String(input.petId));
+      if (!pet) return petNotFound();
+      if (pet.status !== "active") {
+        return fail(409, "PET_NOT_ACTIVE", "활성 상태의 개체만 기록할 수 있습니다.");
+      }
+      const careItem = CARE_ITEM_OF[input.itemCode];
+      if (!careItem) return fail(422, "CARE_ITEM_INVALID", "유효한 관리 항목이 아닙니다.");
+      if (parseISO(input.occurredAt) > new Date()) {
+        return fail(422, "FUTURE_TIME", "앞으로의 시각은 기록할 수 없어요.");
+      }
+      if (input.photoFileId && !db.files.some((f) => f.id === String(input.photoFileId))) {
+        return fail(404, "FILE_NOT_FOUND", "파일을 찾을 수 없습니다.");
+      }
+      // 같은 항목 일정이 있으면 그 일정의 기록으로 남겨 다음 예정일이 다시 계산되게 한다
+      const routine = db.routines.find(
+        (r) => r.petId === pet.id && r.careItem === careItem && r.enabled,
+      );
+      const record: DbRecord = {
+        id: nextNumericId(),
+        petId: pet.id,
+        routineId: routine?.id ?? null,
+        careItem,
+        type: "done",
+        method: "manual",
+        occurredAt: new Date(input.occurredAt).toISOString(),
+        createdAt: new Date().toISOString(),
+        intake: input.outcome ? INTAKE_OF[input.outcome] : null,
+        weightG: input.valueNum ?? null,
+        memo: input.memo?.trim() || null,
+        foodName: routine?.foodName ?? null,
+        skipReason: null,
+        photoIds: input.photoFileId ? [String(input.photoFileId)] : [],
+        deletedAt: null,
+        revisions: [],
+      };
+      db.records.push(record);
+      if (routine) routine.postponedTo = null;
+      return success({ record: wireRecord(record), routineUpdated: null }, { status: 201 });
+    }),
+  ),
+
+  http.get(
+    url("/records/:recordId"),
+    authed(({ params, user }) => {
+      const record = myRecord(user, params.recordId);
+      if (!record || record.deletedAt) return recordNotFound();
+      return success({ record: wireRecord(record), revisions: wireRevisions(record) });
+    }),
+  ),
+
+  http.patch(
+    url("/records/:recordId"),
+    authed(async ({ request, params, user }) => {
+      const record = myRecord(user, params.recordId);
+      if (!record || record.deletedAt) return recordNotFound();
+      const input = (await request.json()) as BackendRecordUpdate;
+      if (!Number.isInteger(input.revisionNo)) {
+        return fail(400, "VALIDATION_FAILED", "요청값이 누락되었거나 올바르지 않습니다.");
+      }
+      if (input.revisionNo !== revisionNoOf(record)) {
+        return fail(409, "RECORD_CONFLICT", "다른 요청에 의해 기록이 변경되었습니다.");
+      }
+      if (input.occurredAt && parseISO(input.occurredAt) > new Date()) {
+        return fail(422, "FUTURE_TIME", "앞으로의 시각은 기록할 수 없어요.");
+      }
+      const before = recordFields(record);
+      if (input.occurredAt) record.occurredAt = new Date(input.occurredAt).toISOString();
+      if (input.outcome !== undefined) {
+        record.intake = input.outcome ? INTAKE_OF[input.outcome] : null;
+      }
+      if (input.valueNum !== undefined) record.weightG = input.valueNum;
+      if (input.memo !== undefined) record.memo = input.memo?.trim() || null;
+      if (input.photoFileId !== undefined) {
+        record.photoIds = input.photoFileId ? [String(input.photoFileId)] : [];
+      }
+      const after = recordFields(record);
+      const changedFields = Object.keys(after).filter((k) => before[k] !== after[k]);
+      if (changedFields.length) {
+        record.revisions.push({
+          at: new Date().toISOString(),
+          changedFields,
+          before: Object.fromEntries(changedFields.map((k) => [k, before[k]])),
+          after: Object.fromEntries(changedFields.map((k) => [k, after[k]])),
+        });
+      }
+      return success({ record: wireRecord(record), routineUpdated: null });
+    }),
+  ),
+
+  http.delete(
+    url("/records/:recordId"),
+    authed(({ params, user }) => {
+      const record = myRecord(user, params.recordId);
+      if (!record) return recordNotFound();
+      // 이미 지운 기록을 다시 지워도 같은 응답 (멱등)
+      record.deletedAt ??= new Date().toISOString();
+      return success({
+        recordId: Number(record.id),
+        deletedAt: record.deletedAt,
+        restorableUntil: restorableUntil(record.deletedAt),
+        routineUpdated: null,
+      });
+    }),
+  ),
+
+  http.post(
+    url("/records/:recordId/restore"),
+    authed(({ params, user }) => {
+      const record = myRecord(user, params.recordId);
+      if (!record) return recordNotFound();
+      if (!record.deletedAt) {
+        return fail(409, "RECORD_NOT_DELETED", "삭제된 기록만 복구할 수 있습니다.");
+      }
+      if (new Date(restorableUntil(record.deletedAt)) < new Date()) {
+        return fail(410, "RESTORE_WINDOW_EXPIRED", "기록 복구 가능 기간이 지났습니다.");
+      }
+      record.deletedAt = null;
+      return success({ record: wireRecord(record), routineUpdated: null });
+    }),
+  ),
+];
+
+const FILE_PURPOSES = ["PET_PHOTO", "RECORD_PHOTO"];
+
+/**
+ * 사진 올리기·조회 주소 (백엔드에 이미 있는 API와 같은 모양).
+ * NEXT_PUBLIC_API_LIVE에 file을 넣으면 이 묶음은 빼고 진짜 백엔드로 보낸다 (browser.ts)
+ */
+export const fileHandlers = [
+  http.post(
+    url("/files"),
+    authed(async ({ request, user }) => {
+      const purpose = new URL(request.url).searchParams.get("purpose");
+      if (!purpose || !FILE_PURPOSES.includes(purpose)) {
+        return fail(400, "UNSUPPORTED_FILE_PURPOSE", "지원하지 않는 파일 용도입니다.");
+      }
+      const form = await request.formData();
+      const file = form.get("file");
+      if (!(file instanceof Blob)) {
+        return fail(400, "VALIDATION_FAILED", "요청값이 누락되었거나 올바르지 않습니다.");
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        return fail(413, "FILE_TOO_LARGE", "파일 크기가 허용 범위를 초과했습니다.");
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = "";
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      const contentType = file.type || "image/jpeg";
+      const dataUrl = `data:${contentType};base64,${btoa(binary)}`;
+      const saved = { id: nextNumericId(), url: dataUrl, ownerId: user.id };
+      db.files.push(saved);
+      return success(
+        {
+          id: Number(saved.id),
+          purpose,
+          contentType,
+          sizeBytes: file.size,
+          width: null,
+          height: null,
+          url: saved.url,
+        },
+        { status: 201 },
+      );
+    }),
+  ),
+
+  http.get(
+    url("/files/:fileId"),
+    authed(({ params, user }) => {
+      const file = db.files.find((f) => f.id === params.fileId && f.ownerId === user.id);
+      if (!file) return fail(404, "FILE_NOT_FOUND", "파일을 찾을 수 없습니다.");
+      return success({
+        url: file.url,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+        contentType: file.url.slice(5, file.url.indexOf(";")),
+      });
+    }),
+  ),
+];
+
+/** 백엔드에 아직 없는 API. 로그인이 진짜여도 목업이 답한다 */
+export const appHandlers = [
+  // ── 종·관리 기준 ────────────────────────────────────────
+  http.get(url("/species/:speciesId/care-standards"), async ({ params }) => {
+    await wait();
+    const speciesId = params.speciesId as SpeciesId;
+    if (!SPECIES.includes(speciesId)) return notFound();
+    return HttpResponse.json(careStandardTable(speciesId));
+  }),
+
+  // ── 개체 상태 (함께했던 개체) ───────────────────────────
   http.post(
     url("/pets/:petId/status-changes"),
     authed(async ({ request, params, user }) => {
@@ -561,7 +838,7 @@ export const appHandlers = [
       if (sameDay) return fail(409, "ALREADY_RECORDED", "오늘 이미 기록했어요.");
 
       const record: DbRecord = {
-        id: nextId("r"),
+        id: nextNumericId(),
         petId: routine.petId,
         routineId: routine.id,
         careItem: routine.careItem,
@@ -592,7 +869,7 @@ export const appHandlers = [
       const { reason } = (await request.json()) as { reason: string | null };
       const now = new Date().toISOString();
       const record: DbRecord = {
-        id: nextId("r"),
+        id: nextNumericId(),
         petId: routine.petId,
         routineId: routine.id,
         careItem: routine.careItem,
@@ -639,143 +916,6 @@ export const appHandlers = [
       const params = new URL(request.url).searchParams;
       const date = params.get("date") ?? ymd(new Date());
       return HttpResponse.json(buildToday(user.id, date, params.get("petId") ?? undefined));
-    }),
-  ),
-
-  // ── 기록 ───────────────────────────────────────────────
-  http.get(
-    url("/records"),
-    authed(({ request, user }) => {
-      const params = new URL(request.url).searchParams;
-      const petId = params.get("petId");
-      const careItem = params.get("careItem");
-      const from = params.get("from");
-      const to = params.get("to");
-      const limit = Number(params.get("limit") ?? 30);
-      const offset = Number(params.get("cursor") ?? 0);
-      const myPetIds = new Set(
-        db.pets.filter((p) => p.userId === user.id && !p.deletedAt).map((p) => p.id),
-      );
-      const rows = db.records
-        .filter((r) => !r.deletedAt && myPetIds.has(r.petId))
-        .filter((r) => !petId || r.petId === petId)
-        .filter((r) => !careItem || r.careItem === careItem)
-        .filter((r) => !from || ymd(parseISO(r.occurredAt)) >= from)
-        .filter((r) => !to || ymd(parseISO(r.occurredAt)) <= to)
-        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
-      const page = rows.slice(offset, offset + limit);
-      return HttpResponse.json({
-        items: page.map(serializeRecord),
-        nextCursor: offset + limit < rows.length ? String(offset + limit) : null,
-      });
-    }),
-  ),
-
-  http.post(
-    url("/records"),
-    authed(async ({ request, user }) => {
-      const input = (await request.json()) as RecordCreateInput;
-      if (!myPet(user, input.petId)) return notFound();
-      if (parseISO(input.occurredAt) > new Date()) {
-        return fail(422, "FUTURE_TIME", "앞으로의 시각은 기록할 수 없어요.");
-      }
-      // 같은 항목 일정이 있으면 그 일정의 기록으로 남겨 다음 예정일이 다시 계산되게 한다
-      const routine = db.routines.find(
-        (r) => r.petId === input.petId && r.careItem === input.careItem && r.enabled,
-      );
-      const record: DbRecord = {
-        id: nextId("r"),
-        petId: input.petId,
-        routineId: routine?.id ?? null,
-        careItem: input.careItem as CareItem,
-        type: "done",
-        method: "manual",
-        occurredAt: input.occurredAt,
-        createdAt: new Date().toISOString(),
-        intake: (input.intake as Intake | null) ?? null,
-        weightG: input.weightG ?? null,
-        memo: input.memo?.trim() || null,
-        foodName: routine?.foodName ?? null,
-        skipReason: null,
-        photoIds: input.photoFileIds ?? [],
-        deletedAt: null,
-        revisions: [],
-      };
-      db.records.push(record);
-      if (routine) routine.postponedTo = null;
-      return HttpResponse.json(serializeRecord(record), { status: 201 });
-    }),
-  ),
-
-  http.get(
-    url("/records/:recordId"),
-    authed(({ params, user }) => {
-      const record = myRecord(user, params.recordId);
-      if (!record || record.deletedAt) return notFound();
-      return HttpResponse.json(serializeRecord(record));
-    }),
-  ),
-
-  http.patch(
-    url("/records/:recordId"),
-    authed(async ({ request, params, user }) => {
-      const record = myRecord(user, params.recordId);
-      if (!record || record.deletedAt) return notFound();
-      const input = (await request.json()) as RecordUpdateInput;
-      if (input.occurredAt && parseISO(input.occurredAt) > new Date()) {
-        return fail(422, "FUTURE_TIME", "앞으로의 시각은 기록할 수 없어요.");
-      }
-      const before = summarize(record);
-      if (input.occurredAt !== undefined) record.occurredAt = input.occurredAt;
-      if (input.intake !== undefined) record.intake = input.intake ?? null;
-      if (input.weightG !== undefined) record.weightG = input.weightG ?? null;
-      if (input.memo !== undefined) record.memo = input.memo?.trim() || null;
-      if (input.photoFileIds !== undefined) record.photoIds = input.photoFileIds;
-      record.revisions.push({
-        at: new Date().toISOString(),
-        summary: `${before} → ${summarize(record)}`,
-      });
-      return HttpResponse.json(serializeRecord(record));
-    }),
-  ),
-
-  http.delete(
-    url("/records/:recordId"),
-    authed(({ params, user }) => {
-      const record = myRecord(user, params.recordId);
-      if (!record || record.deletedAt) return notFound();
-      record.deletedAt = new Date().toISOString();
-      return new HttpResponse(null, { status: 204 });
-    }),
-  ),
-
-  http.post(
-    url("/records/:recordId/restore"),
-    authed(({ params, user }) => {
-      const record = myRecord(user, params.recordId);
-      if (!record) return notFound();
-      record.deletedAt = null;
-      return HttpResponse.json(serializeRecord(record));
-    }),
-  ),
-
-  // ── 파일 ───────────────────────────────────────────────
-  http.post(
-    url("/files"),
-    authed(async ({ request, user }) => {
-      const form = await request.formData();
-      const file = form.get("file");
-      if (!(file instanceof Blob)) return fail(422, "VALIDATION", "파일을 골라 주세요.");
-      if (file.size > 10 * 1024 * 1024) {
-        return fail(413, "FILE_TOO_LARGE", "사진은 10MB까지 올릴 수 있어요.");
-      }
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      let binary = "";
-      for (const byte of bytes) binary += String.fromCharCode(byte);
-      const dataUrl = `data:${file.type || "image/jpeg"};base64,${btoa(binary)}`;
-      const saved = { id: nextId("f"), url: dataUrl, ownerId: user.id };
-      db.files.push(saved);
-      return HttpResponse.json({ id: saved.id, url: saved.url }, { status: 201 });
     }),
   ),
 
@@ -877,7 +1017,7 @@ export const appHandlers = [
       const input = (await request.json()) as HandoverAcceptInput;
       const pet = {
         ...source,
-        id: nextId("p"),
+        id: nextNumericId(),
         userId: user.id,
         name: input.name.trim(),
         hatchedOn: input.hatchedOn,
@@ -919,4 +1059,12 @@ export const appHandlers = [
   http.get(url("/health"), () => HttpResponse.json({ status: "ok" })),
 ];
 
-export const handlers = [...authHandlers, ...userHandlers, ...appHandlers];
+export const handlers = [
+  ...authHandlers,
+  ...userHandlers,
+  ...speciesHandlers,
+  ...petHandlers,
+  ...recordHandlers,
+  ...fileHandlers,
+  ...appHandlers,
+];

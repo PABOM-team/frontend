@@ -12,12 +12,13 @@ type Pending = { key: string; file: File; status: "uploading" | "failed" };
 
 /**
  * 사진 칸 (R03·R02). 고르면 바로 줄여서 올리고, 실패하면 그 칸에서 다시 시도한다 (C2-4).
- * 올린 사진을 누르면 크게 보기. 최대 장수를 넘게 고르면 넘친 사진은 올리지 않는다
+ * 올린 사진을 누르면 크게 보기. 최대 장수를 넘게 고르면 넘친 사진은 올리지 않는다.
+ * 백엔드 기록은 사진을 한 장만 받아서 기본 최대 장수는 1
  */
 export function PhotoInput({
   value,
   onChange,
-  max = 5,
+  max = 1,
   onView,
   onBusyChange,
 }: {

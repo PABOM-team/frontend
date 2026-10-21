@@ -15,7 +15,10 @@ export const env = {
    */
   apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
   apiMocking: process.env.NEXT_PUBLIC_API_MOCKING === "enabled",
-  /** 목업 모드에서도 진짜 백엔드로 보내는 API 묶음. auth(로그인·약관 동의), user(내 정보·회원 탈퇴) */
+  /**
+   * 목업 모드에서도 진짜 백엔드로 보내는 API 묶음. auth(로그인·약관 동의), user(내 정보·회원 탈퇴),
+   * species(종·모프), pet(개체), record(기록), file(사진). 묶음 목록은 src/mocks/browser.ts
+   */
   apiLive: list(process.env.NEXT_PUBLIC_API_LIVE),
   vapidPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
 } as const;

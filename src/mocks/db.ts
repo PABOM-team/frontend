@@ -3,12 +3,14 @@ import type { CareItem, Intake, RoutineCareItem } from "@/shared/domain/care";
 import type { HandoverScope } from "@/shared/domain/handover";
 import type { EndReason, Sex } from "@/shared/domain/pet";
 import type { SpeciesId } from "@/shared/domain/species";
+import { SPECIES_PROFILE } from "@/shared/domain/species-catalog";
 import type { AuthProvider } from "@/shared/domain/user";
-import { SPECIES_DATA, standardIntervals } from "./data";
+import { standardIntervals } from "./data";
 
 /**
  * 목업 서버의 저장소. 브라우저에서는 localStorage에 저장해 새로고침해도 이어진다.
  * 실제 백엔드 테이블(IA 12_데이터)과 비슷한 모양으로 두고, 응답 모양은 handlers에서 만든다.
+ * 개체·기록·파일 ID는 백엔드처럼 숫자(문자열로 저장)다.
  */
 
 export type DbUser = {
@@ -31,7 +33,7 @@ export type DbPet = {
   manualStageCode: string | null;
   stageUncertain?: boolean;
   acquiredOn: string | null;
-  photoUrl: string | null;
+  photoFileId: string | null;
   status: "active" | "ended";
   endReason: EndReason | null;
   endedOn: string | null;
@@ -68,7 +70,15 @@ export type DbRecord = {
   skipReason: string | null;
   photoIds: string[];
   deletedAt: string | null;
-  revisions: { at: string; summary: string }[];
+  revisions: DbRevision[];
+};
+
+/** 정정 이력. 백엔드처럼 바뀐 칸과 그 전후 값을 남긴다 */
+export type DbRevision = {
+  at: string;
+  changedFields: string[];
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
 };
 
 export type DbFile = { id: string; url: string; ownerId: string };
@@ -97,7 +107,7 @@ export type DbState = {
 
 const STORAGE_KEY = "pabom-mock-db";
 // 시드가 바뀌면 올린다. 저장된 목업 데이터가 이 버전과 다르면 새 시드로 시작한다
-const VERSION = 2;
+const VERSION = 3;
 
 export const ymd = (date: Date) => format(date, "yyyy-MM-dd");
 const at = (date: Date, hour: number, minute = 0) =>
@@ -129,11 +139,11 @@ export function createSeed(today = new Date()): DbState {
   };
 
   const pet = (
-    p: Omit<DbPet, "userId" | "deletedAt" | "photoUrl" | "manualStageCode"> & Partial<DbPet>,
-  ) => state.pets.push({ userId, deletedAt: null, photoUrl: null, manualStageCode: null, ...p });
+    p: Omit<DbPet, "userId" | "deletedAt" | "photoFileId" | "manualStageCode"> & Partial<DbPet>,
+  ) => state.pets.push({ userId, deletedAt: null, photoFileId: null, manualStageCode: null, ...p });
 
   pet({
-    id: "p-kong",
+    id: "1",
     name: "콩이",
     speciesId: "crested_gecko",
     morph: "할리퀸",
@@ -146,7 +156,7 @@ export function createSeed(today = new Date()): DbState {
     createdAt: d(60).toISOString(),
   });
   pet({
-    id: "p-dal",
+    id: "2",
     name: "달이",
     speciesId: "leopard_gecko",
     morph: "노멀",
@@ -159,7 +169,7 @@ export function createSeed(today = new Date()): DbState {
     createdAt: d(58).toISOString(),
   });
   pet({
-    id: "p-byeol",
+    id: "3",
     name: "별이",
     speciesId: "leopard_gecko",
     morph: "노멀",
@@ -172,7 +182,7 @@ export function createSeed(today = new Date()): DbState {
     createdAt: d(520).toISOString(),
   });
   pet({
-    id: "p-choco",
+    id: "4",
     name: "초코",
     speciesId: "crested_gecko",
     morph: "플레임",
@@ -186,11 +196,11 @@ export function createSeed(today = new Date()): DbState {
   });
 
   // 콩이(준성체 크레): 분무는 1일 지남, 급여는 오늘, 나머지는 앞으로
-  const kong = addRoutines(state, "p-kong", "crested_gecko", "juvenile", d(60));
+  const kong = addRoutines(state, "1", "crested_gecko", "juvenile", d(60));
   // 달이(성체 레오): 급여 오늘
-  const dal = addRoutines(state, "p-dal", "leopard_gecko", "adult", d(58));
+  const dal = addRoutines(state, "2", "leopard_gecko", "adult", d(58));
   // 분양 보낸 초코: 인계 카드 예시(DEMO2026)에 넘길 체크 리스트
-  addRoutines(state, "p-choco", "crested_gecko", "adult", d(250));
+  addRoutines(state, "4", "crested_gecko", "adult", d(250));
   const lastDone: Record<string, number> = {
     [kong.misting!]: 2,
     [kong.feeding!]: 2,
@@ -211,9 +221,9 @@ export function createSeed(today = new Date()): DbState {
     for (let ago = first; ago <= 56; ago += routine.intervalDays) {
       n += 1;
       const day = d(ago);
-      const weightBase = routine.petId === "p-kong" ? 45 : 62;
+      const weightBase = routine.petId === "1" ? 45 : 62;
       state.records.push({
-        id: `r-${state.seq++}`,
+        id: String(state.seq++),
         petId: routine.petId,
         routineId: routine.id,
         careItem: routine.careItem,
@@ -237,7 +247,7 @@ export function createSeed(today = new Date()): DbState {
   // 직접 기록 몇 건
   const manual = (petId: string, careItem: CareItem, ago: number, memo: string | null) =>
     state.records.push({
-      id: `r-${state.seq++}`,
+      id: String(state.seq++),
       petId,
       routineId: null,
       careItem,
@@ -254,17 +264,17 @@ export function createSeed(today = new Date()): DbState {
       deletedAt: null,
       revisions: [],
     });
-  manual("p-kong", "shed", 4, "탈피를 시작했어요. 꼬리 쪽이 하얘요.");
-  manual("p-dal", "memo", 9, "은신처를 새로 바꿔 줬어요.");
+  manual("1", "shed", 4, "탈피를 시작했어요. 꼬리 쪽이 하얘요.");
+  manual("2", "memo", 9, "은신처를 새로 바꿔 줬어요.");
 
   // 함께했던 개체의 지난 기록
   for (const [petId, endAgo, count] of [
-    ["p-byeol", 75, 24],
-    ["p-choco", 80, 12],
+    ["3", 75, 24],
+    ["4", 80, 12],
   ] as const) {
     for (let i = 0; i < count; i += 1) {
       state.records.push({
-        id: `r-${state.seq++}`,
+        id: String(state.seq++),
         petId,
         routineId: null,
         careItem: i % 3 === 0 ? "memo" : "feeding",
@@ -287,7 +297,7 @@ export function createSeed(today = new Date()): DbState {
   state.cards.push({
     code: "DEMO2026",
     userId,
-    petId: "p-choco",
+    petId: "4",
     scope: { routines: true, recordWeeks: 4, photos: false, nickname: true },
     status: "unused",
     createdAt: d(1).toISOString(),
@@ -305,7 +315,7 @@ export function addRoutines(
   start: Date,
   override?: Partial<Record<RoutineCareItem, number>>,
 ) {
-  const species = SPECIES_DATA.find((s) => s.id === speciesId)!;
+  const species = SPECIES_PROFILE[speciesId];
   const ids: Partial<Record<RoutineCareItem, string>> = {};
   for (const [careItem, standard] of Object.entries(standardIntervals(speciesId, stageCode))) {
     const item = careItem as RoutineCareItem;
@@ -361,4 +371,10 @@ export function resetDb() {
 export function nextId(prefix: string) {
   db.seq += 1;
   return `${prefix}-${db.seq}`;
+}
+
+/** 개체·기록·파일 ID. 백엔드처럼 숫자 */
+export function nextNumericId() {
+  db.seq += 1;
+  return String(db.seq);
 }

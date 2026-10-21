@@ -30,6 +30,8 @@ export const careRecordSchema = z.object({
   skipReason: z.string().nullable(),
   photos: z.array(photoSchema),
   revisions: z.array(recordRevisionSchema),
+  /** 정정할 때 보내는 낙관적 잠금 번호. 목록 아이템에는 없어서 null */
+  revisionNo: z.number().int().nullable(),
 });
 export type CareRecord = z.infer<typeof careRecordSchema>;
 
@@ -43,7 +45,7 @@ export const MEMO_MAX = 200;
 
 export type RecordQuery = {
   petId?: string;
-  careItem?: string;
+  careItem?: z.infer<typeof careItemSchema>;
   /** YYYY-MM-DD, 양 끝 포함 */
   from?: string;
   to?: string;

@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { authApi, meApi, petsApi, recordsApi, routinesApi, todayApi } from "@/shared/api/endpoints";
+import {
+  authApi,
+  meApi,
+  petsApi,
+  recordsApi,
+  routinesApi,
+  speciesApi,
+  todayApi,
+} from "@/shared/api/endpoints";
 import { clearSession, setAccessToken, setStoredAccount } from "@/shared/api/session";
 import { todayYmd } from "@/shared/lib/date";
 import { resetDb } from "./db";
@@ -116,6 +124,77 @@ describe("목업 API", () => {
 
   it("남의 개체는 404로 존재를 숨긴다", async () => {
     await login("google");
-    await expect(petsApi.get("p-kong")).rejects.toMatchObject({ response: { status: 404 } });
+    // 카카오 회원(유나)의 콩이
+    await expect(petsApi.get("1")).rejects.toMatchObject({ response: { status: 404 } });
+  });
+
+  it("종 목록은 MVP 종만, 모프는 백엔드 모프 이름으로 보여 준다", async () => {
+    const species = await speciesApi.list();
+    expect(species.map((s) => s.id)).toEqual(["crested_gecko", "leopard_gecko"]);
+    expect(species[0]!.morphs).toContain("할리퀸");
+  });
+
+  it("개체는 백엔드 모양으로 주고받고, 화면에는 도메인 모양으로 보인다", async () => {
+    await login("google");
+    const pet = await petsApi.create({
+      name: "모찌",
+      speciesId: "leopard_gecko",
+      morph: "맥스노우",
+      sex: "female",
+      hatchedOn: null,
+      lifeStageCode: "juvenile",
+      stageUncertain: true,
+      acquiredOn: null,
+      photoFileId: null,
+    });
+    expect(pet).toMatchObject({
+      id: expect.stringMatching(/^\d+$/),
+      speciesId: "leopard_gecko",
+      morph: "맥스노우",
+      sex: "female",
+      lifeStageCode: "juvenile",
+      lifeStageSource: "manual",
+      stageUncertain: true,
+    });
+
+    // 목록에 없는 모프는 직접 입력으로 남는다
+    const updated = await petsApi.update(pet, { morph: "슈퍼 맥스노우", stageUncertain: false });
+    expect(updated).toMatchObject({ morph: "슈퍼 맥스노우", stageUncertain: false });
+    expect(await petsApi.list()).toHaveLength(1);
+
+    await petsApi.remove(pet.id);
+    expect(await petsApi.list()).toHaveLength(0);
+  });
+
+  it("기록은 직접 추가·정정·삭제·복구할 수 있고, 오래된 revisionNo로 고치면 409", async () => {
+    await login("kakao");
+    const record = await recordsApi.create({
+      petId: "1",
+      careItem: "weight",
+      occurredAt: new Date().toISOString(),
+      weightG: 46.5,
+      memo: "많이 컸어요",
+    });
+    expect(record).toMatchObject({ careItem: "weight", weightG: 46.5, method: "manual" });
+
+    const fixed = await recordsApi.update(record, { memo: "조금 컸어요" });
+    expect(fixed.memo).toBe("조금 컸어요");
+    expect((await recordsApi.get(record.id)).revisions).toHaveLength(1);
+    // 처음 받은 revisionNo로 또 고치면 다른 정정과 부딪힌다
+    await expect(recordsApi.update(record, { memo: "또" })).rejects.toMatchObject({
+      response: { status: 409 },
+    });
+
+    await recordsApi.remove(record.id);
+    await expect(recordsApi.get(record.id)).rejects.toMatchObject({ response: { status: 404 } });
+    expect((await recordsApi.restore(record.id)).id).toBe(record.id);
+  });
+
+  it("기록 목록은 50개씩 이어 받아 요청한 개수를 채운다", async () => {
+    await login("kakao");
+    const page = await recordsApi.list({ limit: 60 });
+    expect(page.items).toHaveLength(60);
+    const weights = await recordsApi.list({ petId: "1", careItem: "weight", limit: 5 });
+    expect(weights.items.every((r) => r.careItem === "weight" && r.petId === "1")).toBe(true);
   });
 });

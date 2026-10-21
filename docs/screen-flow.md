@@ -283,48 +283,52 @@ QA는 개발 서버(목업 API)에서 375×812로 직접 눌러 확인했다. �
 
 ## API (IA 8_개발 참고 기준, 경로 앞에 `/api/v1`)
 
-| ID     | 메서드·경로                        | 화면              | 연결                                            |
-| ------ | ---------------------------------- | ----------------- | ----------------------------------------------- |
-| API-01 | GET /auth/{provider}/login-url     | A01               | 개발 서버                                       |
-| API-01 | GET /auth/{provider}/callback      | A02               | 개발 서버                                       |
-| API-02 | POST /auth/refresh                 | 모든 화면(401 때) | 개발 서버                                       |
-| API-03 | POST /auth/logout                  | S01               | 개발 서버                                       |
-| API-04 | GET /users/me                      | 진입 분기·S01     | 개발 서버                                       |
-| API-05 | POST /me/agreements                | A03               | 개발 서버                                       |
-| API-07 | DELETE /users/me                   | S02               | 개발 서버                                       |
-| API-10 | GET /species                       | P02·S04           | 목업                                            |
-| API-11 | GET /species/{id}/care-standards   | H04·S04           | 목업                                            |
-| API-20 | GET /pets                          | P01·P08·H01       | 목업                                            |
-| API-21 | POST /pets                         | P02               | 목업                                            |
-| API-22 | GET /pets/{id}                     | P04               | 목업                                            |
-| API-23 | PATCH /pets/{id}                   | P05               | 목업                                            |
-| API-24 | DELETE /pets/{id}                  | P05·P08           | 목업                                            |
-| API-26 | POST /pets/{id}/status-changes     | P06·P08           | 목업                                            |
-| API-30 | GET /pets/{id}/routines            | P03·H04           | 목업                                            |
-| API-31 | PATCH /routines/{id}               | P03·H01           | 목업                                            |
-| API-32 | POST /routines/{id}/reset          | P03               | 목업                                            |
-| API-40 | GET /today                         | H01               | 목업                                            |
-| API-41 | POST /routines/{id}/complete       | H01·H02           | 목업                                            |
-| API-42 | POST /routines/{id}/skip           | H03               | 목업                                            |
-| API-43 | POST /routines/{id}/postpone       | H03               | 목업                                            |
-| API-50 | GET /records                       | H01·P07           | 목업                                            |
-| API-51 | POST /records                      | R03               | 목업                                            |
-| API-52 | GET /records/{id}                  | R02               | 목업                                            |
-| API-53 | PATCH /records/{id}                | R02               | 목업                                            |
-| API-54 | DELETE /records/{id}               | H01·R02           | 목업                                            |
-| API-55 | POST /records/{id}/restore         | R02 되돌리기      | 목업                                            |
-| API-60 | POST /files                        | R03·P02·P05       | 목업 (백엔드 있음, 개체·기록 API가 생기면 연결) |
-| API-80 | POST /handover-cards               | T01               | 목업                                            |
-| API-81 | GET /handover-cards/{code}         | T02·T03           | 목업                                            |
-| API-82 | POST /handover-cards/{code}/accept | T03               | 목업                                            |
-| API-83 | GET /handover-cards                | T04               | 목업                                            |
-| API-84 | DELETE /handover-cards/{code}      | T04               | 목업                                            |
+| ID     | 메서드·경로                        | 화면              | 연결                                              |
+| ------ | ---------------------------------- | ----------------- | ------------------------------------------------- |
+| API-01 | GET /auth/{provider}/login-url     | A01               | 개발 서버                                         |
+| API-01 | GET /auth/{provider}/callback      | A02               | 개발 서버                                         |
+| API-02 | POST /auth/refresh                 | 모든 화면(401 때) | 개발 서버                                         |
+| API-03 | POST /auth/logout                  | S01               | 개발 서버                                         |
+| API-04 | GET /users/me                      | 진입 분기·S01     | 개발 서버                                         |
+| API-05 | POST /me/agreements                | A03               | 개발 서버                                         |
+| API-07 | DELETE /users/me                   | S02               | 개발 서버                                         |
+| API-10 | GET /species                       | P02·S04           | 개발 서버 (`species`)                             |
+| API-12 | GET /species/{id}/morphs           | P02·P05           | 개발 서버 (`species`)                             |
+| API-11 | GET /species/{id}/care-standards   | H04·S04           | 목업                                              |
+| API-20 | GET /pets                          | P01·P08·H01       | 목업 · 백엔드 있음 (`pet`)                        |
+| API-21 | POST /pets                         | P02               | 목업 · 백엔드 있음 (`pet`)                        |
+| API-22 | GET /pets/{id}                     | P04               | 목업 · 백엔드 있음 (`pet`, 일정·최근 기록은 따로) |
+| API-23 | PATCH /pets/{id}                   | P05               | 목업 · 백엔드 있음 (`pet`)                        |
+| API-24 | DELETE /pets/{id}                  | P05·P08           | 목업 · 백엔드 있음 (`pet`)                        |
+| API-26 | POST /pets/{id}/status-changes     | P06·P08           | 목업                                              |
+| API-30 | GET /pets/{id}/routines            | P03·H04           | 목업                                              |
+| API-31 | PATCH /routines/{id}               | P03·H01           | 목업                                              |
+| API-32 | POST /routines/{id}/reset          | P03               | 목업                                              |
+| API-40 | GET /today                         | H01               | 목업                                              |
+| API-41 | POST /routines/{id}/complete       | H01·H02           | 목업                                              |
+| API-42 | POST /routines/{id}/skip           | H03               | 목업                                              |
+| API-43 | POST /routines/{id}/postpone       | H03               | 목업                                              |
+| API-50 | GET /records                       | H01·P07           | 목업 · 백엔드 있음 (`record`)                     |
+| API-51 | POST /records                      | R03               | 목업 · 백엔드 있음 (`record`)                     |
+| API-52 | GET /records/{id}                  | R02               | 목업 · 백엔드 있음 (`record`)                     |
+| API-53 | PATCH /records/{id}                | R02               | 목업 · 백엔드 있음 (`record`)                     |
+| API-54 | DELETE /records/{id}               | H01·R02           | 목업 · 백엔드 있음 (`record`)                     |
+| API-55 | POST /records/{id}/restore         | R02 되돌리기      | 목업 · 백엔드 있음 (`record`)                     |
+| API-60 | POST /files                        | R03·P02·P05       | 목업 · 백엔드 있음 (`file`)                       |
+| API-80 | POST /handover-cards               | T01               | 목업                                              |
+| API-81 | GET /handover-cards/{code}         | T02·T03           | 목업                                              |
+| API-82 | POST /handover-cards/{code}/accept | T03               | 목업                                              |
+| API-83 | GET /handover-cards                | T04               | 목업                                              |
+| API-84 | DELETE /handover-cards/{code}      | T04               | 목업                                              |
 
 신고(API-70~75, SCR-L01~L05)는 Figma에 아직 화면이 없어서 이번 범위에서 뺐다.
 
 ## 실제 API로 바꾸는 법
 
-1. 백엔드 Swagger(`https://dev.api.pabom.app/v3/api-docs`)의 응답 모양을 `src/shared/domain/*.ts` zod 스키마와 맞춘다. 화면은 스키마 타입만 본다. 성공 응답이 `{resultType, success:{data}}`로 감싸져 오면 `successEnvelope`로 푼다.
+1. 백엔드 Swagger(`https://dev.api.pabom.app/v3/api-docs`)의 응답·요청 모양을 `src/shared/domain/backend.ts` zod 스키마로 옮기고,
+   `src/shared/api/adapters.ts`에서 화면용 도메인 모양(`src/shared/domain/*.ts`)으로 바꾼다. 화면은 도메인 타입만 본다.
+   백엔드는 숫자 ID·대문자 코드(`MALE`, `ATE_ALL`, `FEEDING`…), 도메인은 문자열 ID·소문자 값이다. 성공 응답 `{resultType, success:{data}}`는 `successEnvelope`로 푼다.
 2. `src/shared/api/endpoints.ts`가 경로·메서드를 한곳에 모아 둔다. 경로가 다르면 여기만 고친다. orval로 생성하게 되면 이 파일의 함수를 생성된 함수로 바꾸면 된다.
-3. 목업 핸들러를 같은 모양으로 고치고(`src/mocks/handlers.ts`), 그 묶음을 `NEXT_PUBLIC_API_LIVE`에 넣는다. 다 옮기면 `NEXT_PUBLIC_API_MOCKING=disabled`.
+3. 목업 핸들러를 같은 모양으로 고치고(`src/mocks/handlers.ts`, 백엔드 모양 변환은 `src/mocks/wire.ts`), 그 묶음을 `NEXT_PUBLIC_API_LIVE`에 넣는다. 다 옮기면 `NEXT_PUBLIC_API_MOCKING=disabled`.
+   일정·오늘 할 일은 아직 목업이라, `pet`·`record`를 켜면 진짜 개체에는 일정이 없어 홈과 체크 리스트가 비어 보인다.
 4. 로그인은 백엔드가 카카오·구글 주소를 만들어 준다. 백엔드 Redirect URI만 이 앱의 `/api/v1/auth/{provider}/callback`으로 맞추면 된다 (README '로그인').

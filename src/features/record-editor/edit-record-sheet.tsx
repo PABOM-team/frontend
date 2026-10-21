@@ -86,7 +86,7 @@ export function EditRecordSheet({
 
   const save = useMutation({
     mutationFn: () =>
-      recordsApi.update(record!.id, {
+      recordsApi.update(record!, {
         occurredAt: draft!.occurredAt,
         intake: kind === "intake" ? draft!.intake : undefined,
         weightG: kind === "weight" ? weightValue : undefined,

@@ -85,7 +85,7 @@ export function EditPetForm({ pet, onDelete }: { pet: Pet; onDelete: () => void 
       if (draft.stageUncertain !== original.stageUncertain) {
         input.stageUncertain = draft.stageUncertain;
       }
-      return petsApi.update(pet.id, input);
+      return petsApi.update(pet, input);
     },
     onSuccess: async (updated) => {
       await invalidateCareData(queryClient);
